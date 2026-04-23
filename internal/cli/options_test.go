@@ -1,29 +1,23 @@
 package cli
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestParseOptionsReadsFlagsAndPrompt(t *testing.T) {
-	opts, err := ParseOptions([]string{"--json", "--model", "gpt-5.4", "--cwd", "/tmp/demo", "--timeout", "45s", "draw a dragon"})
+func TestParseOptionsSubmitCommand(t *testing.T) {
+	cmd, err := ParseCommand([]string{"submit", "--count", "4", "--concurrency", "2", "draw a dragon"})
 	if err != nil {
-		t.Fatalf("ParseOptions returned error: %v", err)
+		t.Fatalf("ParseCommand returned error: %v", err)
 	}
 
-	if !opts.JSON {
-		t.Fatal("expected JSON to be true")
+	if cmd.Name != "submit" {
+		t.Fatalf("name = %q", cmd.Name)
 	}
-	if opts.Model != "gpt-5.4" {
-		t.Fatalf("model = %q", opts.Model)
+	if cmd.Prompt != "draw a dragon" {
+		t.Fatalf("prompt = %q", cmd.Prompt)
 	}
-	if opts.CWD != "/tmp/demo" {
-		t.Fatalf("cwd = %q", opts.CWD)
+	if cmd.Count != 4 {
+		t.Fatalf("count = %d", cmd.Count)
 	}
-	if opts.Timeout != 45*time.Second {
-		t.Fatalf("timeout = %v", opts.Timeout)
-	}
-	if opts.Prompt != "draw a dragon" {
-		t.Fatalf("prompt = %q", opts.Prompt)
+	if cmd.Concurrency != 2 {
+		t.Fatalf("concurrency = %d", cmd.Concurrency)
 	}
 }

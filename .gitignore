@@ -1,2 +1,5 @@
+.idea
 /imgen
 /.dist/
+/.data/
+/*.db

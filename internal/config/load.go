@@ -24,7 +24,9 @@ func Load(path string) (Config, error) {
 	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, err
 	}
-	cfg.Codex.CWD = expandHome(cfg.Codex.CWD)
+	cfg.Storage.DataDir = expandHome(cfg.Storage.DataDir)
+	cfg.Storage.SQLitePath = expandHome(cfg.Storage.SQLitePath)
+	cfg.Backend.CWD = expandHome(cfg.Backend.CWD)
 	return cfg, nil
 }
 

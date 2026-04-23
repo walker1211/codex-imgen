@@ -2,15 +2,83 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
 
+	api "github.com/walker1211/codex-imgen/internal/api"
+	"github.com/walker1211/codex-imgen/internal/backend"
 	"github.com/walker1211/codex-imgen/internal/cli"
+	"github.com/walker1211/codex-imgen/internal/config"
+	"github.com/walker1211/codex-imgen/internal/notify"
+	"github.com/walker1211/codex-imgen/internal/scheduler"
+	"github.com/walker1211/codex-imgen/internal/service"
+	"github.com/walker1211/codex-imgen/internal/store"
 )
 
 func main() {
-	app := cli.App{
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+	ctx := context.Background()
+	cmd, _ := cli.ParseCommand(os.Args[1:])
+	home, err := os.UserHomeDir()
+	if err != nil {
+		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		os.Exit(1)
 	}
-	os.Exit(app.Run(context.Background(), os.Args[1:]))
+	cfgPath := filepath.Join(home, ".config", "codex-imgen", "config.yaml")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		os.Exit(1)
+	}
+	if cfg.Server.Listen == "" {
+		cfg.Server.Listen = "127.0.0.1:18080"
+	}
+
+	generator := backend.BuiltinCodex{
+		Command:   cfg.Backend.Command,
+		Model:     cfg.Backend.Model,
+		CWD:       cfg.Backend.CWD,
+		Timeout:   cfg.Backend.Timeout,
+		CodexHome: filepath.Join(home, ".codex"),
+	}
+
+	app := cli.App{Stdout: os.Stdout, Stderr: os.Stderr}
+
+	switch cmd.Name {
+	case "run":
+		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
+	case "serve":
+		st := mustOpenStore(home, cfg)
+		defer st.Close()
+		hub := notify.NewWebSocketHub()
+		svc := &service.Service{Store: st, Generator: generator, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
+		handler := api.NewServerWithNotifier(svc, hub)
+		server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadTimeout: cfg.Server.ReadTimeout, WriteTimeout: cfg.Server.WriteTimeout}
+		maintenance := scheduler.Maintenance{Store: st, Mailer: notify.Mailer{Config: cfg.Email}, LeaseTimeout: cfg.Scheduler.TaskLeaseTimeout}
+		app.ServerRunner = cli.HTTPServerRunner{Server: server, Maintenance: cli.MaintenanceAdapter{Maintenance: maintenance}, MaintenanceInterval: cfg.Scheduler.MaintenanceInterval}
+	case "submit", "status", "get", "list", "cancel":
+		app.Client = &cli.Client{BaseURL: "http://" + cfg.Server.Listen}
+	default:
+		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
+	}
+
+	os.Exit(app.Run(ctx, os.Args[1:]))
+}
+
+func mustOpenStore(home string, cfg config.Config) *store.Store {
+	dataDir := cfg.Storage.DataDir
+	if dataDir == "" {
+		dataDir = filepath.Join(home, ".local", "share", "codex-imgen")
+	}
+	dbPath := cfg.Storage.SQLitePath
+	if dbPath == "" {
+		dbPath = filepath.Join(dataDir, "imgen.db")
+	}
+	_ = os.MkdirAll(filepath.Dir(dbPath), 0o755)
+	st, err := store.Open(dbPath)
+	if err != nil {
+		panic(fmt.Sprintf("open store: %v", err))
+	}
+	return st
 }

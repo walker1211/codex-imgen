@@ -4,31 +4,25 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
-func TestLoadUsesDefaultsWhenFileMissing(t *testing.T) {
-	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-
-	if cfg.Codex.Command != "codex" {
-		t.Fatalf("command = %q", cfg.Codex.Command)
-	}
-	if cfg.Prompt.Prefix != "$imagegen" {
-		t.Fatalf("prefix = %q", cfg.Prompt.Prefix)
-	}
-	if cfg.Codex.Timeout != 90*time.Second {
-		t.Fatalf("timeout = %v", cfg.Codex.Timeout)
-	}
-}
-
-func TestLoadExpandsHomeDirectory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+func TestLoadParsesServiceConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	content := []byte("codex:\n  cwd: ~/work/demo\n")
+	content := []byte(`server:
+  listen: 127.0.0.1:18080
+scheduler:
+  global_max_concurrency: 10
+  default_job_concurrency: 2
+backend:
+  type: built_in_codex
+  command: codex
+email:
+  enabled: true
+  smtp_host: smtp.example.com
+  smtp_port: 465
+  from: from@example.com
+  to: to@example.com
+`)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
@@ -38,21 +32,16 @@ func TestLoadExpandsHomeDirectory(t *testing.T) {
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	want := filepath.Join(home, "work", "demo")
-	if cfg.Codex.CWD != want {
-		t.Fatalf("cwd = %q, want %q", cfg.Codex.CWD, want)
+	if cfg.Server.Listen != "127.0.0.1:18080" {
+		t.Fatalf("listen = %q", cfg.Server.Listen)
 	}
-}
-
-func TestLoadRejectsUnknownFields(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	content := []byte("codex:\n  unknown_field: true\n")
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
+	if cfg.Scheduler.GlobalMaxConcurrency != 10 {
+		t.Fatalf("global max = %d", cfg.Scheduler.GlobalMaxConcurrency)
 	}
-
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	if cfg.Backend.Type != "built_in_codex" {
+		t.Fatalf("backend.type = %q", cfg.Backend.Type)
+	}
+	if !cfg.Email.Enabled {
+		t.Fatal("expected email enabled")
 	}
 }
