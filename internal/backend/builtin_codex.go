@@ -2,7 +2,9 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/walker1211/codex-imgen/internal/codex"
@@ -44,7 +46,7 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 		Timeout: b.timeout(),
 	})
 	if err != nil {
-		return GenerateResult{}, err
+		return GenerateResult{}, fmt.Errorf("codex exec failed: %s", formatCommandError(err, result))
 	}
 	parsed, err := parser.ExtractImageResult(result.Stdout, b.codexHome())
 	if err != nil {
@@ -73,4 +75,37 @@ func (b BuiltinCodex) timeout() time.Duration {
 		return b.Timeout
 	}
 	return 90 * time.Second
+}
+
+func formatCommandError(err error, result codex.RunResult) string {
+	parts := []string{"execution failed"}
+	if err == context.DeadlineExceeded {
+		parts = append(parts, "deadline exceeded")
+	} else if err != nil {
+		parts = append(parts, err.Error())
+	}
+	if result.ExitCode != 0 {
+		parts = append(parts, fmt.Sprintf("exit_code=%d", result.ExitCode))
+	}
+	stderr := summarizeOutput(result.Stderr)
+	if stderr != "" {
+		parts = append(parts, fmt.Sprintf("stderr: %s", stderr))
+	}
+	stdout := summarizeOutput(result.Stdout)
+	if stdout != "" {
+		parts = append(parts, fmt.Sprintf("stdout: %s", stdout))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func summarizeOutput(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return ""
+	}
+	output = strings.ReplaceAll(output, "\n", " | ")
+	if len(output) <= 200 {
+		return output
+	}
+	return output[:200] + "..."
 }

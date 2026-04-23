@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuiltinCodexGenerateOneImage(t *testing.T) {
@@ -28,5 +30,35 @@ func TestBuiltinCodexGenerateOneImage(t *testing.T) {
 	}
 	if result.Path == "" {
 		t.Fatal("expected path to be set")
+	}
+}
+
+func TestBuiltinCodexGenerateWrapsCommandError(t *testing.T) {
+	backend := BuiltinCodex{Command: filepath.Join("..", "..", "testdata", "codex-exit-9.sh")}
+
+	_, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "execution failed") {
+		t.Fatalf("expected wrapped execution error, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "codex failed") {
+		t.Fatalf("expected stderr summary in error, got %q", err.Error())
+	}
+}
+
+func TestBuiltinCodexGenerateReportsDeadlineExceeded(t *testing.T) {
+	backend := BuiltinCodex{
+		Command: filepath.Join("..", "..", "testdata", "codex-thread-success.sh"),
+		Timeout: time.Nanosecond,
+	}
+
+	_, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "deadline exceeded") {
+		t.Fatalf("expected deadline exceeded in error, got %q", err.Error())
 	}
 }

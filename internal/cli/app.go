@@ -133,7 +133,11 @@ func (a App) Run(ctx context.Context, args []string) int {
 			Concurrency: cmd.Concurrency,
 		})
 		if err != nil {
-			fmt.Fprintln(a.Stderr, err.Error())
+			if cmd.JSON {
+				fmt.Fprint(a.Stdout, result.RenderJSON(result.Result{OK: false, Error: err.Error()}))
+			} else {
+				fmt.Fprintln(a.Stderr, err.Error())
+			}
 			return 1
 		}
 		if cmd.JSON {

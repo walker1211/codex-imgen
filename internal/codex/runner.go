@@ -47,6 +47,9 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 	if err == nil {
 		return result, nil
 	}
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
 
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		result.ExitCode = exitErr.ExitCode()
