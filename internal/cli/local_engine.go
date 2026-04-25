@@ -47,7 +47,7 @@ func (e LocalEngine) RunSync(ctx context.Context, req SyncRequest) (result.Resul
 				return
 			}
 			defer func() { <-sem }()
-			generated, err := e.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompts[index]})
+			generated, err := e.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompts[index], Images: req.Images})
 			if err != nil {
 				select {
 				case errCh <- err:

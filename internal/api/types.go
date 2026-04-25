@@ -1,9 +1,10 @@
 package api
 
 type CreateJobRequest struct {
-	Prompt      string `json:"prompt"`
-	Count       int    `json:"count"`
-	Concurrency int    `json:"concurrency"`
+	Prompt      string   `json:"prompt"`
+	Images      []string `json:"images,omitempty"`
+	Count       int      `json:"count"`
+	Concurrency int      `json:"concurrency"`
 }
 
 type CreateJobResult struct {
@@ -19,12 +20,12 @@ type JobImage struct {
 }
 
 type JobStatus struct {
-	JobID       string     `json:"job_id"`
-	Status      string     `json:"status"`
-	Count       int        `json:"count"`
-	Completed   int        `json:"completed"`
-	Failed      int        `json:"failed"`
-	Images      []JobImage `json:"images,omitempty"`
+	JobID     string     `json:"job_id"`
+	Status    string     `json:"status"`
+	Count     int        `json:"count"`
+	Completed int        `json:"completed"`
+	Failed    int        `json:"failed"`
+	Images    []JobImage `json:"images,omitempty"`
 }
 
 type JobSummary struct {

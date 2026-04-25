@@ -4,6 +4,7 @@ import "context"
 
 type GenerateRequest struct {
 	Prompt string
+	Images []string
 	Model  string
 	CWD    string
 }

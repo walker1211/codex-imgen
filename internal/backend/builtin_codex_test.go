@@ -4,9 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/walker1211/codex-imgen/internal/codex"
 )
 
 func TestBuiltinCodexGenerateOneImage(t *testing.T) {
@@ -60,5 +63,22 @@ func TestBuiltinCodexGenerateReportsDeadlineExceeded(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "deadline exceeded") {
 		t.Fatalf("expected deadline exceeded in error, got %q", err.Error())
+	}
+}
+
+type recordingRunner struct{ req codex.Request }
+
+func (r *recordingRunner) Run(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+	r.req = req
+	return codex.RunResult{Stdout: "Saved to: file:///tmp/1.png\n"}, nil
+}
+
+func TestBuiltinCodexGenerateBuildsExecArgsWithImages(t *testing.T) {
+	runner := &recordingRunner{}
+	backend := BuiltinCodex{Command: "codex", Runner: runner}
+	_, _ = backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon", Images: []string{"/tmp/1.png", "/tmp/2.png"}})
+	want := []string{"exec", "--json", "--image", "/tmp/1.png", "--image", "/tmp/2.png", "--", "$imagegen draw a dragon"}
+	if !reflect.DeepEqual(runner.req.Args, want) {
+		t.Fatalf("args = %#v, want %#v", runner.req.Args, want)
 	}
 }

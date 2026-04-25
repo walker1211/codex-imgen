@@ -14,7 +14,16 @@ bash ./build.sh
 ./imgen "生成一张 3D 风格的小龙吉祥物，适合网页 hero 区域"
 ./imgen --count 4 --concurrency 2 "五更琉璃，穿着女仆装在咖啡馆"
 ./imgen --count 4 --concurrency 2 --json "五更琉璃，穿着女仆装在咖啡馆"
+./imgen --image ./1.png "保留主体构图和姿态，把这张图改成高质量 3D 手办渲染风格，背景更干净，单图"
 ```
+
+## 图生图说明
+
+- 使用重复 `--image` 传入本机图片路径。
+- 同步 `run` 与异步 `submit` 参数语义一致。
+- 当前方案 A 只支持本机文件路径，不支持 URL 和上传文件。
+- backend 调用 Codex CLI 时会生成 `codex exec --json --image ... -- '<prompt>'`。
+- `--` 分隔符是必需的，否则 Codex CLI 的 variadic `--image` 会吞掉 prompt。
 
 ## 服务模式（当前最小闭环已可用）
 

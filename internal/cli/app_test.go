@@ -11,11 +11,13 @@ import (
 )
 
 type stubEngine struct {
-	result result.Result
-	err    error
+	result      result.Result
+	err         error
+	lastRequest SyncRequest
 }
 
-func (s stubEngine) RunSync(ctx context.Context, req SyncRequest) (result.Result, error) {
+func (s *stubEngine) RunSync(ctx context.Context, req SyncRequest) (result.Result, error) {
+	s.lastRequest = req
 	return s.result, s.err
 }
 
@@ -25,7 +27,7 @@ func TestAppRunPrintsMultiplePaths(t *testing.T) {
 	app := App{
 		Stdout: stdout,
 		Stderr: stderr,
-		Engine: stubEngine{result: result.Result{
+		Engine: &stubEngine{result: result.Result{
 			OK: true,
 			Images: []result.ImageResult{
 				{Index: 1, Path: "/tmp/1.png"},
@@ -84,10 +86,11 @@ func TestAppRunServeStartsServer(t *testing.T) {
 func TestAppRunJSONPrintsStructuredError(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
+	engine := &stubEngine{err: errors.New("codex exec failed: signal: killed; stderr: generation failed")}
 	app := App{
 		Stdout: stdout,
 		Stderr: stderr,
-		Engine: stubEngine{err: errors.New("codex exec failed: signal: killed; stderr: generation failed")},
+		Engine: engine,
 	}
 
 	exitCode := app.Run(context.Background(), []string{"--json", "draw a dragon"})
@@ -106,5 +109,20 @@ func TestAppRunJSONPrintsStructuredError(t *testing.T) {
 	}
 	if got.Error == "" {
 		t.Fatalf("expected error message, got %+v", got)
+	}
+}
+
+func TestAppRunPassesImagesToEngine(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	engine := &stubEngine{result: result.Result{OK: true, Images: []result.ImageResult{{Index: 1, Path: "/tmp/1.png"}}}}
+	app := App{Stdout: stdout, Stderr: stderr, Engine: engine}
+
+	exitCode := app.Run(context.Background(), []string{"--image", "/tmp/1.png", "draw a dragon"})
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d stderr=%q", exitCode, stderr.String())
+	}
+	if len(engine.lastRequest.Images) != 1 || engine.lastRequest.Images[0] != "/tmp/1.png" {
+		t.Fatalf("images = %v", engine.lastRequest.Images)
 	}
 }

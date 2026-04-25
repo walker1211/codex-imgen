@@ -11,13 +11,17 @@ import (
 	"github.com/walker1211/codex-imgen/internal/parser"
 )
 
+type CommandRunner interface {
+	Run(context.Context, codex.Request) (codex.RunResult, error)
+}
+
 type BuiltinCodex struct {
 	Command   string
 	Model     string
 	CWD       string
 	Timeout   time.Duration
 	CodexHome string
-	Runner    codex.Runner
+	Runner    CommandRunner
 }
 
 func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
@@ -36,9 +40,15 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 	if cwd != "" {
 		args = append(args, "--cd", cwd)
 	}
-	args = append(args, req.Prompt)
+	for _, image := range req.Images {
+		args = append(args, "--image", image)
+	}
+	args = append(args, "--", req.Prompt)
 
 	runner := b.Runner
+	if runner == nil {
+		runner = codex.Runner{}
+	}
 	result, err := runner.Run(ctx, codex.Request{
 		Command: b.command(),
 		Args:    args,

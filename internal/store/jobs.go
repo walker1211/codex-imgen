@@ -12,7 +12,7 @@ func (s *Store) CreateJob(ctx context.Context, job Job, images []JobImage) error
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO jobs (job_id, prompt, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, job.JobID, job.Prompt, job.RequestedCount, job.EffectiveCount, job.RequestedConcurrency, job.EffectiveConcurrency, job.Status, job.NotificationStatus); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO jobs (job_id, prompt, images_json, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, job.JobID, job.Prompt, job.ImagesJSON, job.RequestedCount, job.EffectiveCount, job.RequestedConcurrency, job.EffectiveConcurrency, job.Status, job.NotificationStatus); err != nil {
 		return err
 	}
 	for _, image := range images {
@@ -25,7 +25,7 @@ func (s *Store) CreateJob(ctx context.Context, job Job, images []JobImage) error
 
 func (s *Store) GetJob(ctx context.Context, jobID string) (Job, []JobImage, error) {
 	var job Job
-	err := s.db.QueryRowContext(ctx, `SELECT job_id, prompt, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status FROM jobs WHERE job_id = ?`, jobID).Scan(&job.JobID, &job.Prompt, &job.RequestedCount, &job.EffectiveCount, &job.RequestedConcurrency, &job.EffectiveConcurrency, &job.Status, &job.NotificationStatus)
+	err := s.db.QueryRowContext(ctx, `SELECT job_id, prompt, images_json, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status FROM jobs WHERE job_id = ?`, jobID).Scan(&job.JobID, &job.Prompt, &job.ImagesJSON, &job.RequestedCount, &job.EffectiveCount, &job.RequestedConcurrency, &job.EffectiveConcurrency, &job.Status, &job.NotificationStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Job{}, nil, ErrNotFound
@@ -56,7 +56,7 @@ func (s *Store) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT job_id, prompt, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status FROM jobs ORDER BY rowid DESC LIMIT ?`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT job_id, prompt, images_json, requested_count, effective_count, requested_concurrency, effective_concurrency, status, notification_status FROM jobs ORDER BY rowid DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *Store) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 	var jobs []Job
 	for rows.Next() {
 		var job Job
-		if err := rows.Scan(&job.JobID, &job.Prompt, &job.RequestedCount, &job.EffectiveCount, &job.RequestedConcurrency, &job.EffectiveConcurrency, &job.Status, &job.NotificationStatus); err != nil {
+		if err := rows.Scan(&job.JobID, &job.Prompt, &job.ImagesJSON, &job.RequestedCount, &job.EffectiveCount, &job.RequestedConcurrency, &job.EffectiveConcurrency, &job.Status, &job.NotificationStatus); err != nil {
 			return nil, err
 		}
 		jobs = append(jobs, job)

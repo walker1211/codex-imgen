@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -71,9 +73,50 @@ func (s *Service) publish(event notify.Event) {
 	}
 }
 
+func normalizeImagePaths(paths []string) ([]string, error) {
+	var result []string
+	for _, path := range paths {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			continue
+		}
+		abs, err := filepath.Abs(trimmed)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(abs); err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("image path not found: %s", abs)
+			}
+			return nil, err
+		}
+		result = append(result, abs)
+	}
+	return result, nil
+}
+
+func decodeJobImages(job store.Job) ([]string, error) {
+	if strings.TrimSpace(job.ImagesJSON) == "" {
+		return nil, nil
+	}
+	var images []string
+	if err := json.Unmarshal([]byte(job.ImagesJSON), &images); err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
 func (s *Service) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, error) {
 	if strings.TrimSpace(req.Prompt) == "" {
 		return api.CreateJobResult{}, errors.New("prompt is required")
+	}
+	normalizedImages, err := normalizeImagePaths(req.Images)
+	if err != nil {
+		return api.CreateJobResult{}, err
+	}
+	imagesJSON, err := json.Marshal(normalizedImages)
+	if err != nil {
+		return api.CreateJobResult{}, err
 	}
 	jobID := fmt.Sprintf("job_%d", s.now().UnixNano())
 	count := req.Count
@@ -105,14 +148,15 @@ func (s *Service) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, erro
 		concurrency = count
 	}
 	job := store.Job{
-		JobID:                 jobID,
-		Prompt:                req.Prompt,
-		RequestedCount:        req.Count,
-		EffectiveCount:        count,
-		RequestedConcurrency:  req.Concurrency,
-		EffectiveConcurrency:  concurrency,
-		Status:                "queued",
-		NotificationStatus:    "pending",
+		JobID:                jobID,
+		Prompt:               req.Prompt,
+		ImagesJSON:           string(imagesJSON),
+		RequestedCount:       req.Count,
+		EffectiveCount:       count,
+		RequestedConcurrency: req.Concurrency,
+		EffectiveConcurrency: concurrency,
+		Status:               "queued",
+		NotificationStatus:   "pending",
 	}
 	var images []store.JobImage
 	for i := 1; i <= count; i++ {
@@ -164,9 +208,15 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 			_ = s.Store.StartImageRun(ctx, job.JobID, index, s.now())
 			s.publish(notify.Event{Type: "image.started", JobID: job.JobID, Index: index, Status: "running"})
 			prompt := codex.BuildPrompt(s.PromptPrelude, s.PromptPrefix, job.Prompt)
+			jobImages, err := decodeJobImages(job)
+			if err != nil {
+				_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "failed")
+				s.publish(notify.Event{Type: "image.failed", JobID: job.JobID, Index: index, Status: "failed"})
+				return
+			}
 			attempts := s.maxAttempts()
 			for attempt := 1; attempt <= attempts; attempt++ {
-				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompt})
+				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompt, Images: jobImages})
 				if err == nil {
 					_ = s.Store.UpdateImageResult(ctx, job.JobID, index, "done", generated.Path, generated.URI)
 					payload, _ := json.Marshal(map[string]any{"status": "done", "path": generated.Path, "uri": generated.URI})

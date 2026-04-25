@@ -7,11 +7,21 @@ import (
 	"strings"
 )
 
+type imageFlags []string
+
+func (f *imageFlags) String() string { return strings.Join(*f, ",") }
+
+func (f *imageFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
 var ErrHelp = flag.ErrHelp
 
 type Command struct {
 	Name        string
 	Prompt      string
+	Images      []string
 	Count       int
 	Concurrency int
 	JobID       string
@@ -55,6 +65,7 @@ func parseSubmit(args []string) (Command, error) {
 	fs.IntVar(&cmd.Count, "count", 1, "")
 	fs.IntVar(&cmd.Concurrency, "concurrency", 2, "")
 	fs.BoolVar(&cmd.JSON, "json", false, "")
+	fs.Var((*imageFlags)(&cmd.Images), "image", "")
 	if err := fs.Parse(args); err != nil {
 		return Command{}, err
 	}
@@ -72,6 +83,7 @@ func parseRun(args []string) (Command, error) {
 	fs.IntVar(&cmd.Count, "count", 1, "")
 	fs.IntVar(&cmd.Concurrency, "concurrency", 2, "")
 	fs.BoolVar(&cmd.JSON, "json", false, "")
+	fs.Var((*imageFlags)(&cmd.Images), "image", "")
 	if err := fs.Parse(args); err != nil {
 		return Command{}, err
 	}
@@ -113,4 +125,3 @@ Flags:
   --help               show this help text
 `) + "\n"
 }
-

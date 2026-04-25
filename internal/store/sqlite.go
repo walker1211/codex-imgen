@@ -22,6 +22,7 @@ func Open(path string) (*Store, error) {
 CREATE TABLE IF NOT EXISTS jobs (
   job_id TEXT PRIMARY KEY,
   prompt TEXT NOT NULL DEFAULT '',
+  images_json TEXT NOT NULL DEFAULT '[]',
   requested_count INTEGER NOT NULL DEFAULT 1,
   effective_count INTEGER NOT NULL DEFAULT 1,
   requested_concurrency INTEGER NOT NULL DEFAULT 1,
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS job_events (
 		sql   string
 	}{
 		{"jobs", "notification_status", `ALTER TABLE jobs ADD COLUMN notification_status TEXT NOT NULL DEFAULT 'pending'`},
+		{"jobs", "images_json", `ALTER TABLE jobs ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'`},
 		{"job_images", "last_error", `ALTER TABLE job_images ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`},
 		{"job_images", "started_at", `ALTER TABLE job_images ADD COLUMN started_at INTEGER NOT NULL DEFAULT 0`},
 	}

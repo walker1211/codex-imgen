@@ -15,10 +15,12 @@ type stubService struct {
 	listResult   []JobSummary
 }
 
-func (s stubService) CreateJob(req CreateJobRequest) (CreateJobResult, error) { return s.createResult, nil }
-func (s stubService) GetJob(jobID string) (JobStatus, error)                  { return s.jobResult, nil }
-func (s stubService) ListJobs(limit int) ([]JobSummary, error)                { return s.listResult, nil }
-func (s stubService) CancelJob(jobID string) error                            { return nil }
+func (s stubService) CreateJob(req CreateJobRequest) (CreateJobResult, error) {
+	return s.createResult, nil
+}
+func (s stubService) GetJob(jobID string) (JobStatus, error)   { return s.jobResult, nil }
+func (s stubService) ListJobs(limit int) ([]JobSummary, error) { return s.listResult, nil }
+func (s stubService) CancelJob(jobID string) error             { return nil }
 
 func TestCreateJobReturnsJobID(t *testing.T) {
 	server := NewServer(stubService{createResult: CreateJobResult{JobID: "job_123", Status: "queued"}})
@@ -32,6 +34,18 @@ func TestCreateJobReturnsJobID(t *testing.T) {
 	}
 	if !strings.Contains(resp.Body.String(), "job_123") {
 		t.Fatalf("body = %q", resp.Body.String())
+	}
+}
+
+func TestCreateJobReturnsJobIDWithImages(t *testing.T) {
+	server := NewServer(stubService{createResult: CreateJobResult{JobID: "job_123", Status: "queued"}})
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", strings.NewReader(`{"prompt":"draw a dragon","images":["/tmp/1.png","/tmp/2.png"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	server.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d", resp.Code)
 	}
 }
 
@@ -83,10 +97,21 @@ func TestCancelJobReturnsCancelledStatus(t *testing.T) {
 
 type invalidPromptService struct{}
 
-func (invalidPromptService) CreateJob(req CreateJobRequest) (CreateJobResult, error) { return CreateJobResult{}, errors.New("prompt is required") }
-func (invalidPromptService) GetJob(jobID string) (JobStatus, error)                  { return JobStatus{}, nil }
-func (invalidPromptService) ListJobs(limit int) ([]JobSummary, error)                { return nil, nil }
-func (invalidPromptService) CancelJob(jobID string) error                            { return nil }
+func (invalidPromptService) CreateJob(req CreateJobRequest) (CreateJobResult, error) {
+	return CreateJobResult{}, errors.New("prompt is required")
+}
+func (invalidPromptService) GetJob(jobID string) (JobStatus, error)   { return JobStatus{}, nil }
+func (invalidPromptService) ListJobs(limit int) ([]JobSummary, error) { return nil, nil }
+func (invalidPromptService) CancelJob(jobID string) error             { return nil }
+
+type invalidImageService struct{}
+
+func (invalidImageService) CreateJob(req CreateJobRequest) (CreateJobResult, error) {
+	return CreateJobResult{}, errors.New("image path not found: /tmp/missing.png")
+}
+func (invalidImageService) GetJob(jobID string) (JobStatus, error)   { return JobStatus{}, nil }
+func (invalidImageService) ListJobs(limit int) ([]JobSummary, error) { return nil, nil }
+func (invalidImageService) CancelJob(jobID string) error             { return nil }
 
 func TestCreateJobReturnsBadRequestForEmptyPrompt(t *testing.T) {
 	server := NewServer(invalidPromptService{})
@@ -100,12 +125,28 @@ func TestCreateJobReturnsBadRequestForEmptyPrompt(t *testing.T) {
 	}
 }
 
+func TestCreateJobReturnsBadRequestForInvalidImagePath(t *testing.T) {
+	server := NewServer(invalidImageService{})
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", strings.NewReader(`{"prompt":"draw a dragon","images":["/tmp/missing.png"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	server.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%q", resp.Code, resp.Body.String())
+	}
+}
+
 type notFoundService struct{}
 
-func (notFoundService) CreateJob(req CreateJobRequest) (CreateJobResult, error) { return CreateJobResult{}, nil }
-func (notFoundService) GetJob(jobID string) (JobStatus, error)                  { return JobStatus{}, errors.New("job not found") }
-func (notFoundService) ListJobs(limit int) ([]JobSummary, error)                { return nil, nil }
-func (notFoundService) CancelJob(jobID string) error                            { return errors.New("job not found") }
+func (notFoundService) CreateJob(req CreateJobRequest) (CreateJobResult, error) {
+	return CreateJobResult{}, nil
+}
+func (notFoundService) GetJob(jobID string) (JobStatus, error) {
+	return JobStatus{}, errors.New("job not found")
+}
+func (notFoundService) ListJobs(limit int) ([]JobSummary, error) { return nil, nil }
+func (notFoundService) CancelJob(jobID string) error             { return errors.New("job not found") }
 
 func TestGetJobReturnsNotFound(t *testing.T) {
 	server := NewServer(notFoundService{})

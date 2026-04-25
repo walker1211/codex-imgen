@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,13 +16,15 @@ import (
 )
 
 type fakeGenerator struct {
-	mu    sync.Mutex
-	calls int
+	mu     sync.Mutex
+	calls  int
+	images [][]string
 }
 
 func (g *fakeGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
 	g.mu.Lock()
 	g.calls++
+	g.images = append(g.images, append([]string(nil), req.Images...))
 	idx := g.calls
 	g.mu.Unlock()
 	path := fmt.Sprintf("/tmp/%d.png", idx)
@@ -155,4 +159,84 @@ func TestServiceRunsQueuedJobToCompletion(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("job did not complete in time")
+}
+
+func TestServiceCreateJobStoresAbsoluteImagePaths(t *testing.T) {
+	img := filepath.Join(t.TempDir(), "1.png")
+	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	cwd, _ := os.Getwd()
+	rel, err := filepath.Rel(cwd, img)
+	if err != nil {
+		t.Fatalf("Rel returned error: %v", err)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{Store: s}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{rel}})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+	job, _, err := s.GetJob(context.Background(), created.JobID)
+	if err != nil {
+		t.Fatalf("GetJob returned error: %v", err)
+	}
+	if job.ImagesJSON == "[]" || !strings.Contains(job.ImagesJSON, img) {
+		t.Fatalf("images_json = %q", job.ImagesJSON)
+	}
+}
+
+func TestServiceCreateJobRejectsMissingImagePath(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{Store: s}
+	_, err = svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{"./missing.png"}})
+	if err == nil || !strings.Contains(err.Error(), "image path not found") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestServiceRunJobPassesImagesToGenerator(t *testing.T) {
+	img := filepath.Join(t.TempDir(), "1.png")
+	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	gen := &fakeGenerator{}
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+	svc := Service{Store: s, Generator: gen, PromptPrefix: "$imagegen", RetryDelays: []time.Duration{time.Millisecond}}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{img}})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "completed" || got.Status == "partial_success" || got.Status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(gen.images) == 0 || len(gen.images[0]) != 1 || gen.images[0][0] != img {
+		t.Fatalf("images = %v", gen.images)
+	}
 }

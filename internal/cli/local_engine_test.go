@@ -12,6 +12,7 @@ import (
 type recordingGenerator struct {
 	mu      sync.Mutex
 	prompts []string
+	images  [][]string
 	active  int
 	maxSeen int
 	block   chan struct{}
@@ -20,6 +21,7 @@ type recordingGenerator struct {
 func (g *recordingGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
 	g.mu.Lock()
 	g.prompts = append(g.prompts, req.Prompt)
+	g.images = append(g.images, append([]string(nil), req.Images...))
 	g.active++
 	if g.active > g.maxSeen {
 		g.maxSeen = g.active
@@ -82,4 +84,16 @@ func TestLocalEngineRespectsConcurrencyLimit(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	<-done
+}
+
+func TestLocalEnginePassesImagesToGenerator(t *testing.T) {
+	gen := &recordingGenerator{}
+	engine := LocalEngine{Generator: gen, Prefix: "$imagegen"}
+	_, err := engine.RunSync(context.Background(), SyncRequest{Prompt: "draw a dragon", Images: []string{"/tmp/1.png"}, Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("RunSync returned error: %v", err)
+	}
+	if len(gen.images) != 1 || len(gen.images[0]) != 1 || gen.images[0][0] != "/tmp/1.png" {
+		t.Fatalf("images = %v", gen.images)
+	}
 }

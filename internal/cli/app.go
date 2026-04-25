@@ -12,6 +12,7 @@ import (
 
 type SyncRequest struct {
 	Prompt      string
+	Images      []string
 	Count       int
 	Concurrency int
 }
@@ -21,7 +22,7 @@ type Engine interface {
 }
 
 type ClientAPI interface {
-	CreateJob(context.Context, string, int, int) (api.CreateJobResult, error)
+	CreateJob(context.Context, string, []string, int, int) (api.CreateJobResult, error)
 	GetJob(context.Context, string) (api.JobStatus, error)
 	ListJobs(context.Context, int) ([]api.JobSummary, error)
 	CancelJob(context.Context, string) error
@@ -66,7 +67,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 			fmt.Fprintln(a.Stderr, "not implemented")
 			return 1
 		}
-		job, err := a.Client.CreateJob(ctx, cmd.Prompt, cmd.Count, cmd.Concurrency)
+		job, err := a.Client.CreateJob(ctx, cmd.Prompt, cmd.Images, cmd.Count, cmd.Concurrency)
 		if err != nil {
 			fmt.Fprintln(a.Stderr, err.Error())
 			return 1
@@ -129,6 +130,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 		}
 		res, err := a.Engine.RunSync(ctx, SyncRequest{
 			Prompt:      cmd.Prompt,
+			Images:      cmd.Images,
 			Count:       cmd.Count,
 			Concurrency: cmd.Concurrency,
 		})

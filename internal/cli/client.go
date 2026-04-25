@@ -10,9 +10,10 @@ type Client struct {
 	BaseURL string
 }
 
-func (c Client) CreateJob(ctx context.Context, prompt string, count int, concurrency int) (api.CreateJobResult, error) {
+func (c Client) CreateJob(ctx context.Context, prompt string, images []string, count int, concurrency int) (api.CreateJobResult, error) {
 	return api.Client{BaseURL: c.BaseURL}.CreateJob(ctx, api.CreateJobRequest{
 		Prompt:      prompt,
+		Images:      images,
 		Count:       count,
 		Concurrency: concurrency,
 	})

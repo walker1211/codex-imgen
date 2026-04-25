@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	api "github.com/walker1211/codex-imgen/internal/api"
 )
 
 func TestClientSubmitCommandPrintsJobID(t *testing.T) {
@@ -40,12 +42,12 @@ func TestClientStatusCommandPrintsJobStatus(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"data": map[string]any{
-				"job_id": "job_123",
-				"status": "completed",
-				"count": 1,
+				"job_id":    "job_123",
+				"status":    "completed",
+				"count":     1,
 				"completed": 1,
-				"failed": 0,
-				"images": []map[string]any{{"index": 1, "status": "done", "path": "/tmp/1.png"}},
+				"failed":    0,
+				"images":    []map[string]any{{"index": 1, "status": "done", "path": "/tmp/1.png"}},
 			},
 		})
 	}))
@@ -69,12 +71,12 @@ func TestClientStatusCommandPrintsJobStateWithoutPaths(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"data": map[string]any{
-				"job_id": "job_123",
-				"status": "running",
-				"count": 2,
+				"job_id":    "job_123",
+				"status":    "running",
+				"count":     2,
 				"completed": 0,
-				"failed": 0,
-				"images": []map[string]any{{"index": 1, "status": "running"}, {"index": 2, "status": "queued"}},
+				"failed":    0,
+				"images":    []map[string]any{{"index": 1, "status": "running"}, {"index": 2, "status": "queued"}},
 			},
 		})
 	}))
@@ -96,7 +98,7 @@ func TestClientListCommandPrintsJobs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok": true,
+			"ok":   true,
 			"data": []map[string]any{{"job_id": "job_1", "status": "queued", "count": 2, "completed": 0, "failed": 0}},
 		})
 	}))
@@ -118,7 +120,7 @@ func TestClientCancelCommandPrintsJobID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok": true,
+			"ok":   true,
 			"data": map[string]any{"job_id": "job_1", "status": "cancelled"},
 		})
 	}))
@@ -166,7 +168,7 @@ func TestClientStatusCommandPrintsErrorForMissingJob(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok": false,
+			"ok":    false,
 			"error": map[string]any{"code": "not_found", "message": "job not found"},
 		})
 	}))
@@ -181,5 +183,24 @@ func TestClientStatusCommandPrintsErrorForMissingJob(t *testing.T) {
 	}
 	if got := stderr.String(); got == "" {
 		t.Fatal("expected stderr output")
+	}
+}
+
+func TestClientSubmitRequestIncludesImages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req api.CreateJobRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Decode returned error: %v", err)
+		}
+		if len(req.Images) != 2 {
+			t.Fatalf("images = %v", req.Images)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": map[string]any{"job_id": "job_123", "status": "queued"}})
+	}))
+	defer server.Close()
+
+	_, err := (&Client{BaseURL: server.URL}).CreateJob(context.Background(), "draw a dragon", []string{"/tmp/1.png", "/tmp/2.png"}, 1, 1)
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
 	}
 }

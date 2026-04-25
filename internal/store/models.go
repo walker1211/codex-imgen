@@ -5,6 +5,7 @@ import "time"
 type Job struct {
 	JobID                string
 	Prompt               string
+	ImagesJSON           string
 	RequestedCount       int
 	EffectiveCount       int
 	RequestedConcurrency int
