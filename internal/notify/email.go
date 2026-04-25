@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"errors"
 
 	"github.com/walker1211/codex-imgen/internal/config"
 	"github.com/walker1211/codex-imgen/internal/store"
@@ -24,8 +25,11 @@ type Mailer struct {
 }
 
 func (m Mailer) SendFailure(msg FailureMail) error {
-	if m.Dialer == nil || m.Config.To == "" {
+	if !m.Config.Enabled {
 		return nil
+	}
+	if m.Dialer == nil {
+		return errors.New("email dialer is required when email is enabled")
 	}
 	subject := "[codex-imgen] job failed: " + msg.JobID
 	body := "job_id: " + msg.JobID + "\nprompt: " + msg.Prompt + "\nerror: " + msg.LastError + "\n"
@@ -42,7 +46,7 @@ func NotifyFailureIfNeeded(ctx context.Context, st notificationStore, mailer Mai
 	if err != nil {
 		return err
 	}
-	if job.Status != "failed" || job.NotificationStatus != "pending" {
+	if job.Status != "failed" || job.NotificationStatus != "pending" || !mailer.Config.Enabled {
 		return nil
 	}
 	lastError := "job failed"

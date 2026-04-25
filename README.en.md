@@ -16,7 +16,7 @@ bash ./build.sh
 ./imgen --help
 ```
 
-Fill in `configs/config.yaml` before using service mode or custom backend settings. Put secrets in `.env` only. Email settings are reserved for the maintenance notification hook; the production binary does not include a real SMTP dialer yet.
+Fill in `configs/config.yaml` before using service mode, custom backend settings, or email notifications. Put SMTP auth secrets in `.env` only.
 
 Note: the binary reads `configs/config.yaml` from the current working directory. Adding the binary to `PATH` does not remove that requirement.
 
@@ -33,7 +33,7 @@ Rules:
 
 - Put only sensitive values in `.env`.
 - Keep structured configuration in YAML.
-- `EMAIL_SMTP_AUTH_CODE` is the SMTP auth-code placeholder for email. This project currently standardizes config loading conventions; a real SMTP dialer should be implemented separately.
+- `EMAIL_SMTP_AUTH_CODE` is the SMTP auth code used for email delivery.
 
 Initialization:
 
@@ -88,20 +88,37 @@ email:
   use_proxy: false
 ```
 
-Common fields:
+Configuration fields:
 
-- `server.listen`: local service address.
-- `storage.data_dir`: default service data directory. If empty, the user data directory is used.
-- `storage.sqlite_path`: SQLite database path. If empty, `data_dir/imgen.db` is used.
-- `scheduler.default_job_concurrency`: default concurrency for async jobs.
-- `scheduler.max_job_concurrency`: maximum concurrency for one job.
-- `scheduler.max_count_per_job`: maximum image count for one job.
+- `server.listen`: service-mode listen address. `127.0.0.1:18080` allows local access only; use `0.0.0.0:18080` only when you intentionally expose it to the network.
+- `server.read_timeout`: HTTP request read timeout.
+- `server.write_timeout`: HTTP response write timeout.
+- `storage.data_dir`: async service data directory. If empty, the user data directory is used. For local development, `./.data` is a good choice.
+- `storage.sqlite_path`: SQLite database path. If empty, `data_dir/imgen.db` is used. For local development, `./.data/imgen.db` is a good choice.
+- `scheduler.global_max_concurrency`: global concurrency cap reserved for scheduler expansion.
+- `scheduler.default_job_concurrency`: default concurrency for async jobs when `--concurrency` is not provided.
+- `scheduler.max_job_concurrency`: maximum concurrency for one job; larger user input is clamped to this value.
+- `scheduler.max_count_per_job`: maximum image count for one job; larger `--count` input is clamped to this value.
+- `scheduler.maintenance_interval`: service-mode maintenance interval for checks, failure progression, and failure notification.
+- `scheduler.task_lease_timeout`: running-task lease timeout used to detect expired work.
+- `scheduler.max_attempts`: maximum generation attempts per image.
+- `backend.type`: generation backend type. Currently use `built_in_codex`.
 - `backend.command`: Codex CLI command. Defaults to `codex`.
-- `backend.model`: model name passed to Codex CLI.
-- `backend.cwd`: Codex execution working directory. Optional.
-- `backend.timeout`: timeout for one Codex invocation.
-- `backend.prompt.prefix`: default `$imagegen` prefix.
-- `email.enabled`: reserved maintenance-notification switch; the production binary does not perform real SMTP delivery yet.
+- `backend.model`: model name passed to Codex CLI. If empty, Codex CLI chooses its default model.
+- `backend.cwd`: Codex CLI working directory. If empty, the current process working directory is used. `~/` is expanded.
+- `backend.timeout`: timeout for one Codex/imagegen invocation. Increase it if generation frequently times out.
+- `backend.prompt.prefix`: prefix automatically prepended to prompts, usually `$imagegen`.
+- `backend.prompt.prelude`: fixed prompt prelude for default style and output constraints.
+- `email.enabled`: whether to enable maintenance failure email notification.
+- `email.smtp_host`: SMTP server host.
+- `email.smtp_port`: SMTP server port. Port `465` uses implicit TLS; other ports use a timeout-controlled standard SMTP connection.
+- `email.from`: sender email address and SMTP login identity.
+- `email.to`: recipient email address.
+- `email.timeout`: timeout for one SMTP connection/send attempt.
+- `email.retry_times`: maximum email send attempts.
+- `email.retry_wait_time`: wait duration between failed email attempts.
+- `email.use_proxy`: email proxy switch. SMTP proxying is not supported yet; setting this to `true` returns a config error.
+- `.env` `EMAIL_SMTP_AUTH_CODE`: SMTP auth code or password. Required when email is enabled.
 
 ## Synchronous text-to-image
 
@@ -186,7 +203,7 @@ The WebSocket implementation is intentionally minimal: it supports connection up
 - Multi-image sync mode prints one path per line.
 - Service mode supports querying status and image paths by `job_id`.
 - The maintenance ticker is wired into `serve` for minimal checks, failure progression, and final failure notification.
-- The maintenance-notification hook is wired into the maintenance path; a real SMTP dialer, richer failure classification, and immediate notification are future work.
+- Failure email notification is wired into the maintenance path; richer failure classification and immediate notification are future work.
 
 ## Development / Testing
 

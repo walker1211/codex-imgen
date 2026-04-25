@@ -16,7 +16,7 @@ bash ./build.sh
 ./imgen --help
 ```
 
-在使用服务模式或自定义 backend 前，请先填写 `configs/config.yaml`。敏感信息只放 `.env`。邮件配置目前是维护通知钩子的预留配置，生产二进制还没有内置真实 SMTP dialer。
+在使用服务模式、自定义 backend 或邮件通知前，请先填写 `configs/config.yaml`。SMTP 授权码等敏感信息只放 `.env`。
 
 说明：程序默认从当前工作目录读取 `configs/config.yaml`。即使把二进制加入 `PATH`，也仍然需要在包含 `configs/config.yaml` 的工作目录中运行。
 
@@ -33,7 +33,7 @@ bash ./build.sh
 
 - `.env` 只放敏感值。
 - YAML 只放结构化配置。
-- `EMAIL_SMTP_AUTH_CODE` 是邮件 SMTP 授权码占位；当前项目只对齐配置加载约定，真实 SMTP dialer 后续单独实现。
+- `EMAIL_SMTP_AUTH_CODE` 是邮件 SMTP 授权码，供邮件发送使用。
 
 初始化方式：
 
@@ -88,20 +88,37 @@ email:
   use_proxy: false
 ```
 
-常用字段：
+参数说明：
 
-- `server.listen`：本地服务监听地址。
-- `storage.data_dir`：异步服务默认数据目录；为空时使用用户目录下的默认数据路径。
-- `storage.sqlite_path`：SQLite 数据库路径；为空时使用 `data_dir/imgen.db`。
-- `scheduler.default_job_concurrency`：异步任务默认并发数。
-- `scheduler.max_job_concurrency`：单个任务最大并发数。
-- `scheduler.max_count_per_job`：单个任务最大图片数量。
+- `server.listen`：服务模式监听地址。`127.0.0.1:18080` 只允许本机访问；如需局域网访问可改为 `0.0.0.0:18080`。
+- `server.read_timeout`：HTTP 读取请求超时。
+- `server.write_timeout`：HTTP 写响应超时。
+- `storage.data_dir`：异步服务数据目录；为空时使用用户目录下的默认数据路径。本地开发可设为 `./.data`。
+- `storage.sqlite_path`：SQLite 数据库路径；为空时使用 `data_dir/imgen.db`。本地开发可设为 `./.data/imgen.db`。
+- `scheduler.global_max_concurrency`：全局最大并发数，作为调度扩展上限配置。
+- `scheduler.default_job_concurrency`：异步任务默认并发数；提交任务未指定 `--concurrency` 时使用。
+- `scheduler.max_job_concurrency`：单个任务允许的最大并发数；用户传入更大值会被限制到该上限。
+- `scheduler.max_count_per_job`：单个任务允许生成的最大图片数量；用户传入更大 `--count` 会被限制到该上限。
+- `scheduler.maintenance_interval`：服务模式维护任务执行间隔，用于巡检、失败状态推进和失败通知。
+- `scheduler.task_lease_timeout`：运行中任务租约超时时间，用于判断任务是否过期。
+- `scheduler.max_attempts`：每张图片最多生成尝试次数。
+- `backend.type`：生成后端类型；当前使用 `built_in_codex`。
 - `backend.command`：Codex CLI 命令，默认 `codex`。
-- `backend.model`：传给 Codex CLI 的模型名。
-- `backend.cwd`：Codex 执行工作目录，可为空。
-- `backend.timeout`：单次 Codex 调用超时。
-- `backend.prompt.prefix`：默认 `$imagegen` 前缀。
-- `email.enabled`：预留的邮件维护通知开关；生产二进制暂不执行真实 SMTP 发送。
+- `backend.model`：传给 Codex CLI 的模型名；为空时由 Codex CLI 使用默认模型。
+- `backend.cwd`：Codex CLI 执行工作目录；为空时使用当前进程工作目录，支持 `~/` 展开。
+- `backend.timeout`：单次 Codex/imagegen 调用超时；生成经常超时时可适当调大。
+- `backend.prompt.prefix`：自动加到提示词前面的前缀，通常保持 `$imagegen`。
+- `backend.prompt.prelude`：固定提示词说明，用于统一默认风格和输出约束。
+- `email.enabled`：是否启用维护失败邮件通知。
+- `email.smtp_host`：SMTP 服务器地址。
+- `email.smtp_port`：SMTP 端口；`465` 使用隐式 TLS，其他端口使用带超时控制的标准 SMTP 连接。
+- `email.from`：发件人邮箱，同时作为 SMTP 登录账号。
+- `email.to`：收件人邮箱。
+- `email.timeout`：单次 SMTP 连接和发送超时。
+- `email.retry_times`：邮件发送最大尝试次数。
+- `email.retry_wait_time`：邮件发送失败后的重试间隔。
+- `email.use_proxy`：邮件代理开关；当前 SMTP 发送暂不支持代理，设为 `true` 会返回配置错误。
+- `.env` 中的 `EMAIL_SMTP_AUTH_CODE`：SMTP 授权码或密码；启用邮件时必填。
 
 ## 同步文生图
 
@@ -186,7 +203,7 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 - 多图同步模式下一行一个路径。
 - 服务模式通过 `job_id` 查询状态与图片路径。
 - maintenance ticker 已接入 `serve`，会做最小巡检、失败状态推进和最终失败通知。
-- 维护通知钩子已接入 maintenance 路径；真实 SMTP dialer、失败分类与即时通知后续再完善。
+- 失败邮件通知已接入 maintenance 路径；更精细的失败分类与即时通知后续再完善。
 
 ## 开发 / 测试
 

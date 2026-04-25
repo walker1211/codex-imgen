@@ -63,11 +63,15 @@ func TestLoadReadsDotEnv(t *testing.T) {
 	}
 
 	_ = os.Unsetenv("EMAIL_SMTP_AUTH_CODE")
-	if _, err := Load(DefaultPath()); err != nil {
+	cfg, err := Load(DefaultPath())
+	if err != nil {
 		t.Fatalf("Load returned error after unset: %v", err)
 	}
 	if got := os.Getenv("EMAIL_SMTP_AUTH_CODE"); got != "test-secret" {
 		t.Fatalf("EMAIL_SMTP_AUTH_CODE = %q", got)
+	}
+	if cfg.Email.SMTPAuthCode != "test-secret" {
+		t.Fatalf("cfg.Email.SMTPAuthCode = %q", cfg.Email.SMTPAuthCode)
 	}
 }
 

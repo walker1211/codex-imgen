@@ -55,6 +55,7 @@ type EmailConfig struct {
 	RetryTimes    int           `yaml:"retry_times"`
 	RetryWaitTime time.Duration `yaml:"retry_wait_time"`
 	UseProxy      bool          `yaml:"use_proxy"`
+	SMTPAuthCode  string        `yaml:"-"`
 }
 
 func Default() Config {

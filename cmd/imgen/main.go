@@ -54,7 +54,11 @@ func main() {
 		svc := &service.Service{Store: st, Generator: generator, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
 		handler := api.NewServerWithNotifier(svc, hub)
 		server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadTimeout: cfg.Server.ReadTimeout, WriteTimeout: cfg.Server.WriteTimeout}
-		maintenance := scheduler.Maintenance{Store: st, Mailer: notify.Mailer{Config: cfg.Email}, LeaseTimeout: cfg.Scheduler.TaskLeaseTimeout}
+		if err := notify.ValidateEmailConfig(cfg.Email); err != nil {
+			_, _ = os.Stderr.WriteString(err.Error() + "\n")
+			os.Exit(1)
+		}
+		maintenance := scheduler.Maintenance{Store: st, Mailer: notify.NewMailer(cfg.Email), LeaseTimeout: cfg.Scheduler.TaskLeaseTimeout}
 		app.ServerRunner = cli.HTTPServerRunner{Server: server, Maintenance: cli.MaintenanceAdapter{Maintenance: maintenance}, MaintenanceInterval: cfg.Scheduler.MaintenanceInterval}
 	case "submit", "status", "get", "list", "cancel":
 		app.Client = &cli.Client{BaseURL: "http://" + cfg.Server.Listen}

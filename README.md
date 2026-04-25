@@ -22,7 +22,7 @@ bash ./build.sh
 ./imgen --help
 ```
 
-Fill in `configs/config.yaml` before using service mode or custom backend settings. Put secrets in `.env` only. Email settings are reserved for the maintenance notification hook; the production binary does not include a real SMTP dialer yet. Run commands from the repository or another working directory containing `configs/config.yaml`.
+Fill in `configs/config.yaml` before using service mode, custom backend settings, or email notifications. Put SMTP auth secrets in `.env` only. Run commands from the repository or another working directory containing `configs/config.yaml`.
 
 ## Common Commands
 

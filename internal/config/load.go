@@ -20,6 +20,7 @@ func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			applyEnv(&cfg)
 			return cfg, nil
 		}
 		return Config{}, err
@@ -33,7 +34,12 @@ func Load(path string) (Config, error) {
 	cfg.Storage.DataDir = expandHome(cfg.Storage.DataDir)
 	cfg.Storage.SQLitePath = expandHome(cfg.Storage.SQLitePath)
 	cfg.Backend.CWD = expandHome(cfg.Backend.CWD)
+	applyEnv(&cfg)
 	return cfg, nil
+}
+
+func applyEnv(cfg *Config) {
+	cfg.Email.SMTPAuthCode = os.Getenv("EMAIL_SMTP_AUTH_CODE")
 }
 
 func expandHome(path string) string {
