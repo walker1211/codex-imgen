@@ -25,8 +25,7 @@ func main() {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
 	}
-	cfgPath := filepath.Join(home, ".config", "codex-imgen", "config.yaml")
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)

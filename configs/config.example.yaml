@@ -1,0 +1,41 @@
+server:
+  listen: 127.0.0.1:18080
+  read_timeout: 5s
+  write_timeout: 30s
+
+storage:
+  data_dir: ""
+  sqlite_path: ""
+
+scheduler:
+  global_max_concurrency: 10
+  default_job_concurrency: 2
+  max_job_concurrency: 10
+  max_count_per_job: 10
+  maintenance_interval: 5m
+  task_lease_timeout: 30m
+  max_attempts: 3
+
+backend:
+  type: built_in_codex
+  command: codex
+  model: gpt-5.4
+  cwd: ""
+  timeout: 90s
+  prompt:
+    prefix: "$imagegen"
+    prelude: |
+      使用内置 imagegen 技能。
+      输出单张图片。
+      默认适合网页或品牌资产场景。
+
+email:
+  enabled: false
+  smtp_host: smtp.example.com
+  smtp_port: 465
+  from: from@example.com
+  to: to@example.com
+  timeout: 3s
+  retry_times: 3
+  retry_wait_time: 500ms
+  use_proxy: false

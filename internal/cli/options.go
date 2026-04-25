@@ -25,7 +25,6 @@ type Command struct {
 	Count       int
 	Concurrency int
 	JobID       string
-	ConfigPath  string
 	JSON        bool
 }
 
@@ -121,6 +120,7 @@ func UsageText() string {
 Flags:
   --count int          target image count
   --concurrency int    per-job max concurrency
+  --image path         local reference image path, repeatable
   --json               output JSON instead of plain text
   --help               show this help text
 `) + "\n"

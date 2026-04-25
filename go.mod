@@ -3,6 +3,7 @@ module github.com/walker1211/codex-imgen
 go 1.25.0
 
 require (
+	github.com/joho/godotenv v1.5.1
 	github.com/lxzan/gws v1.8.8
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.39.0

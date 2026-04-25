@@ -6,10 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
+func DefaultPath() string {
+	return filepath.Join("configs", "config.yaml")
+}
+
 func Load(path string) (Config, error) {
+	_ = godotenv.Load()
 	cfg := Default()
 	data, err := os.ReadFile(path)
 	if err != nil {

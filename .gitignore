@@ -1,6 +1,34 @@
-.DS_Store
-.idea
+# Binary
 /imgen
-/.dist/
+
+# Secrets
+.env
+
+# Local config
+/configs/config.yaml
+
+# Data
 /.data/
 /*.db
+
+# Build artifacts
+/.dist/
+
+# IDE
+.idea/
+
+# Logs
+logs/
+nohup.out
+
+# OS
+.DS_Store
+
+# Worktrees
+/.worktrees/
+
+# Local/private project assets
+/.claude/
+/docs/superpowers/
+/CLAUDE.md
+/.superpowers/
