@@ -1,5 +1,6 @@
 # Binary
 /imgen
+/skill-sync
 
 # Secrets
 .env
@@ -28,7 +29,16 @@ nohup.out
 /.worktrees/
 
 # Local/private project assets
-/.claude/
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/imgen/
+!/.claude/skills/imgen/**
+/.openclaw/*
+!/.openclaw/skills/
+/.openclaw/skills/*
+!/.openclaw/skills/imgen/
+!/.openclaw/skills/imgen/**
 /docs/superpowers/
 /CLAUDE.md
 /.superpowers/

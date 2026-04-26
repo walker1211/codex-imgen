@@ -20,6 +20,31 @@ bash ./build.sh
 
 说明：程序默认从当前工作目录读取 `configs/config.yaml`。即使把二进制加入 `PATH`，也仍然需要在包含 `configs/config.yaml` 的工作目录中运行。
 
+## Skill 同步
+
+仓库内的 `.claude/skills/imgen/` 与 `.openclaw/skills/imgen/` 是 skill 源文件；`~/.claude/skills/imgen/` 与 `~/.openclaw/workspace/skills/imgen/` 是本机安装产物。
+
+检查本机安装是否与仓库源文件一致：
+
+```bash
+go run ./cmd/skill-sync --check
+```
+
+把仓库源文件同步到本机 Claude 和 OpenClaw：
+
+```bash
+go run ./cmd/skill-sync --apply
+```
+
+也可以先运行 `bash ./build.sh`，再使用本地二进制：
+
+```bash
+./skill-sync --check
+./skill-sync --apply
+```
+
+默认只检查漂移；只有显式传入 `--apply` 时才会覆盖本机 skill 安装目录。
+
 ## 配置
 
 仓库内配置布局：

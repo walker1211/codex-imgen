@@ -1,0 +1,23 @@
+{
+  "skill_name": "imgen",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想用 imgen 生成 4 张图片，并发 2，主题是五更琉璃穿着女仆装在咖啡馆。先不要真的执行，给我最小命令。",
+      "expected_output": "Return a minimal ./imgen command using --count 4 and --concurrency 2, quote the Chinese prompt safely, and avoid extra setup steps unless needed.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我有 ./1.png 和 ./2.png，想用第一张做主体、第二张做风格参考，生成一张统一风格的图。给 OpenClaw 一份可以复用的调用说明，不要依赖 Claude 工具。",
+      "expected_output": "Explain platform-neutral CLI usage with repeated --image flags, include the exact ./imgen command, mention local file paths only, and avoid Claude-specific tool names.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "imgen serve 里有个 job 一直很慢，我有 job-id。请告诉我排查顺序和 sqlite 查询语句。",
+      "expected_output": "Ask for the job id if it is missing; otherwise give status/get/list, attempt SQL, phase SQL, logs/out.log, and native codex exec verification in that order.",
+      "files": []
+    }
+  ]
+}

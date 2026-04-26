@@ -20,6 +20,31 @@ Fill in `configs/config.yaml` before using service mode, custom backend settings
 
 Note: the binary reads `configs/config.yaml` from the current working directory. Adding the binary to `PATH` does not remove that requirement.
 
+## Skill Sync
+
+Repository directories `.claude/skills/imgen/` and `.openclaw/skills/imgen/` are the skill sources; `~/.claude/skills/imgen/` and `~/.openclaw/workspace/skills/imgen/` are local install artifacts.
+
+Check whether local installs match the repository sources:
+
+```bash
+go run ./cmd/skill-sync --check
+```
+
+Copy repository sources into the local Claude and OpenClaw installs:
+
+```bash
+go run ./cmd/skill-sync --apply
+```
+
+You can also build first with `bash ./build.sh` and then use the local binary:
+
+```bash
+./skill-sync --check
+./skill-sync --apply
+```
+
+The default behavior is drift checking only; local skill install directories are overwritten only when `--apply` is passed explicitly.
+
 ## Configuration
 
 Repository config layout:
