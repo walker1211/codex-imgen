@@ -161,11 +161,21 @@ codex exec --json --image ./1.png -- '$imagegen Keep the subject composition and
 
 ## Service mode
 
-Start the local service:
+Start the local service in the foreground:
 
 ```bash
 ./imgen serve
 ```
+
+Or use the repository scripts to run it in the background:
+
+```bash
+./start.sh
+./stop.sh
+./restart.sh
+```
+
+The background script uses `nohup ./imgen serve` and writes logs to `logs/out.log`.
 
 Submit and query from another terminal:
 
@@ -177,6 +187,13 @@ Submit and query from another terminal:
 ./imgen get <job-id>
 ./imgen list
 ./imgen cancel <job-id>
+```
+
+To inspect whether a job retried, query the SQLite attempt history:
+
+```bash
+sqlite3 .data/imgen.db \
+  "select job_id,image_index,attempt,status,duration_ms,path,last_error from job_image_attempts where job_id='<job-id>' order by image_index,attempt;"
 ```
 
 ## WebSocket

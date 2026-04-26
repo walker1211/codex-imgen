@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/walker1211/codex-imgen/internal/config"
+	"github.com/walker1211/codex-imgen/internal/logutil"
 	"github.com/walker1211/codex-imgen/internal/store"
 )
 
@@ -57,6 +58,7 @@ func NotifyFailureIfNeeded(ctx context.Context, st notificationStore, mailer Mai
 		}
 	}
 	if err := mailer.SendFailure(FailureMail{To: mailer.Config.To, JobID: job.JobID, Prompt: job.Prompt, LastError: lastError}); err != nil {
+		logutil.Errorf("maintenance notification failed job_id=%s error_len=%d", job.JobID, len(err.Error()))
 		return st.UpdateJobNotification(ctx, jobID, "failed")
 	}
 	return st.UpdateJobNotification(ctx, jobID, "sent")

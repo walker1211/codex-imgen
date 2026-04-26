@@ -161,11 +161,21 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 
 ## 服务模式
 
-先启动本地服务：
+可以直接前台启动本地服务：
 
 ```bash
 ./imgen serve
 ```
+
+也可以使用仓库内脚本在后台运行服务：
+
+```bash
+./start.sh
+./stop.sh
+./restart.sh
+```
+
+后台脚本使用 `nohup ./imgen serve`，日志写入 `logs/out.log`。
 
 再在另一个终端提交和查询：
 
@@ -177,6 +187,13 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 ./imgen get <job-id>
 ./imgen list
 ./imgen cancel <job-id>
+```
+
+如需排查某个任务是否发生重试，可以查看 SQLite 中的 attempt 明细：
+
+```bash
+sqlite3 .data/imgen.db \
+  "select job_id,image_index,attempt,status,duration_ms,path,last_error from job_image_attempts where job_id='<job-id>' order by image_index,attempt;"
 ```
 
 ## WebSocket

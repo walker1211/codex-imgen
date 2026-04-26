@@ -47,6 +47,22 @@ CREATE TABLE IF NOT EXISTS job_events (
   event_type TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS job_image_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL,
+  image_index INTEGER NOT NULL,
+  attempt INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  started_at INTEGER NOT NULL DEFAULT 0,
+  finished_at INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  path TEXT NOT NULL DEFAULT '',
+  uri TEXT NOT NULL DEFAULT '',
+  last_error TEXT NOT NULL DEFAULT '',
+  stdout_tail TEXT NOT NULL DEFAULT '',
+  stderr_tail TEXT NOT NULL DEFAULT '',
+  UNIQUE(job_id, image_index, attempt)
+);
 `
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err

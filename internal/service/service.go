@@ -10,10 +10,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	api "github.com/walker1211/codex-imgen/internal/api"
 	"github.com/walker1211/codex-imgen/internal/backend"
 	"github.com/walker1211/codex-imgen/internal/codex"
+	"github.com/walker1211/codex-imgen/internal/logutil"
 	"github.com/walker1211/codex-imgen/internal/notify"
 	"github.com/walker1211/codex-imgen/internal/store"
 )
@@ -27,6 +29,8 @@ type JobStore interface {
 	StartImageRun(context.Context, string, int, time.Time) error
 	UpdateImageStatus(context.Context, string, int, string) error
 	UpdateImageResult(context.Context, string, int, string, string, string) error
+	StartImageAttempt(context.Context, string, int, int, time.Time) error
+	FinishImageAttempt(context.Context, string, int, int, string, time.Time, string, string, string, string, string) error
 	CancelOutstandingImages(context.Context, string) error
 }
 
@@ -58,6 +62,18 @@ func (s *Service) retryDelays() []time.Duration {
 		return s.RetryDelays
 	}
 	return []time.Duration{5 * time.Second, 15 * time.Second}
+}
+
+func (s *Service) retryDelay(attempt int) time.Duration {
+	delays := s.retryDelays()
+	if attempt <= 0 {
+		return delays[0]
+	}
+	index := attempt - 1
+	if index >= len(delays) {
+		index = len(delays) - 1
+	}
+	return delays[index]
 }
 
 func (s *Service) maxAttempts() int {
@@ -104,6 +120,20 @@ func decodeJobImages(job store.Job) ([]string, error) {
 		return nil, err
 	}
 	return images, nil
+}
+
+func tailString(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(value) <= limit {
+		return value
+	}
+	start := len(value) - limit
+	for start < len(value) && !utf8.RuneStart(value[start]) {
+		start++
+	}
+	return value[start:]
 }
 
 func (s *Service) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, error) {
@@ -165,6 +195,7 @@ func (s *Service) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, erro
 	if err := s.Store.CreateJob(context.Background(), job, images); err != nil {
 		return api.CreateJobResult{}, err
 	}
+	logutil.Printf("job created job_id=%s count=%d concurrency=%d images=%d", jobID, count, concurrency, len(normalizedImages))
 	s.publish(notify.Event{Type: "job.created", JobID: jobID, Status: "queued"})
 	if s.Generator != nil {
 		s.launchJob(job)
@@ -190,8 +221,21 @@ func (s *Service) launchJob(job store.Job) {
 	}()
 }
 
+func (s *Service) failImage(jobID string, index int) {
+	_ = s.Store.UpdateImageStatus(context.Background(), jobID, index, "failed")
+	logutil.Warnf("image failed job_id=%s image_index=%d", jobID, index)
+	s.publish(notify.Event{Type: "image.failed", JobID: jobID, Index: index, Status: "failed"})
+}
+
+func (s *Service) cancelImage(jobID string, index int) {
+	_ = s.Store.UpdateImageStatus(context.Background(), jobID, index, "cancelled")
+	logutil.Printf("image cancelled job_id=%s image_index=%d", jobID, index)
+	s.publish(notify.Event{Type: "image.cancelled", JobID: jobID, Index: index, Status: "cancelled"})
+}
+
 func (s *Service) runJob(ctx context.Context, job store.Job) error {
 	_ = s.Store.UpdateJobStatus(ctx, job.JobID, "running")
+	logutil.Printf("job started job_id=%s count=%d concurrency=%d", job.JobID, job.EffectiveCount, job.EffectiveConcurrency)
 	s.publish(notify.Event{Type: "job.started", JobID: job.JobID, Status: "running"})
 	sem := make(chan struct{}, job.EffectiveConcurrency)
 	var wg sync.WaitGroup
@@ -202,44 +246,101 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
+				s.cancelImage(job.JobID, index)
 				return
 			}
 			defer func() { <-sem }()
 			_ = s.Store.StartImageRun(ctx, job.JobID, index, s.now())
+			logutil.Printf("image started job_id=%s image_index=%d", job.JobID, index)
 			s.publish(notify.Event{Type: "image.started", JobID: job.JobID, Index: index, Status: "running"})
 			prompt := codex.BuildPrompt(s.PromptPrelude, s.PromptPrefix, job.Prompt)
 			jobImages, err := decodeJobImages(job)
 			if err != nil {
-				_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "failed")
-				s.publish(notify.Event{Type: "image.failed", JobID: job.JobID, Index: index, Status: "failed"})
+				s.failImage(job.JobID, index)
 				return
 			}
 			attempts := s.maxAttempts()
 			for attempt := 1; attempt <= attempts; attempt++ {
+				attemptStarted := s.now()
+				if err := s.Store.StartImageAttempt(ctx, job.JobID, index, attempt, attemptStarted); err != nil {
+					if ctx.Err() != nil {
+						s.cancelImage(job.JobID, index)
+						return
+					}
+					s.failImage(job.JobID, index)
+					return
+				}
+				logutil.Printf("image attempt started job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
 				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompt, Images: jobImages})
+				finishedAt := s.now()
 				if err == nil {
-					_ = s.Store.UpdateImageResult(ctx, job.JobID, index, "done", generated.Path, generated.URI)
+					if ctx.Err() != nil {
+						if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
+							s.cancelImage(job.JobID, index)
+							return
+						}
+						logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
+						s.cancelImage(job.JobID, index)
+						return
+					}
+					if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "done", finishedAt, generated.Path, generated.URI, "", tailString(generated.RawOutput, 2000), ""); err != nil {
+						s.failImage(job.JobID, index)
+						return
+					}
+					logutil.Printf("image attempt succeeded job_id=%s image_index=%d attempt=%d path=%s", job.JobID, index, attempt, generated.Path)
+					if err := s.Store.UpdateImageResult(context.Background(), job.JobID, index, "done", generated.Path, generated.URI); err != nil {
+						if ctx.Err() != nil {
+							s.cancelImage(job.JobID, index)
+							return
+						}
+						s.failImage(job.JobID, index)
+						return
+					}
+					logutil.Printf("image completed job_id=%s image_index=%d path=%s", job.JobID, index, generated.Path)
 					payload, _ := json.Marshal(map[string]any{"status": "done", "path": generated.Path, "uri": generated.URI})
 					s.publish(notify.Event{Type: "image.completed", JobID: job.JobID, Index: index, Status: "done", Path: generated.Path, Payload: payload})
 					return
 				}
+				lastError := tailString(err.Error(), 2000)
 				if ctx.Err() != nil {
-					_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "cancelled")
-					s.publish(notify.Event{Type: "image.cancelled", JobID: job.JobID, Index: index, Status: "cancelled"})
+					if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", lastError, "", ""); err != nil {
+						s.cancelImage(job.JobID, index)
+						return
+					}
+					logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
+					s.cancelImage(job.JobID, index)
 					return
 				}
+				if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "failed", finishedAt, "", "", lastError, "", ""); err != nil {
+					s.failImage(job.JobID, index)
+					return
+				}
+				logutil.Warnf("image attempt failed job_id=%s image_index=%d attempt=%d error_len=%d", job.JobID, index, attempt, len(lastError))
 				if attempt < attempts {
-					delay := s.retryDelays()[attempt-1]
+					delay := s.retryDelay(attempt)
+					logutil.Printf("image retry scheduled job_id=%s image_index=%d next_attempt=%d delay=%s", job.JobID, index, attempt+1, delay)
 					select {
 					case <-time.After(delay):
 					case <-ctx.Done():
-						_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "cancelled")
-						s.publish(notify.Event{Type: "image.cancelled", JobID: job.JobID, Index: index, Status: "cancelled"})
+						nextAttempt := attempt + 1
+						cancelledAt := s.now()
+						if err := s.Store.StartImageAttempt(context.Background(), job.JobID, index, nextAttempt, cancelledAt); err != nil {
+							s.cancelImage(job.JobID, index)
+							return
+						}
+						if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, nextAttempt, "cancelled", cancelledAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
+							s.cancelImage(job.JobID, index)
+							return
+						}
+						logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, nextAttempt)
+						s.cancelImage(job.JobID, index)
 						return
 					}
 				}
 			}
 			_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "failed")
+			logutil.Warnf("final image failed job_id=%s image_index=%d attempts=%d", job.JobID, index, attempts)
+			logutil.Warnf("image failed job_id=%s image_index=%d", job.JobID, index)
 			s.publish(notify.Event{Type: "image.failed", JobID: job.JobID, Index: index, Status: "failed"})
 		}(i)
 	}
@@ -249,7 +350,6 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 		return err
 	}
 	if latest.Status == "cancelled" {
-		s.publish(notify.Event{Type: "job.cancelled", JobID: job.JobID, Status: "cancelled"})
 		return nil
 	}
 	completed := 0
@@ -267,6 +367,7 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 	if err := s.Store.UpdateJobStatus(context.Background(), job.JobID, status); err != nil {
 		return err
 	}
+	logutil.Printf("job %s job_id=%s completed=%d count=%d", status, job.JobID, completed, job.EffectiveCount)
 	payload, _ := json.Marshal(map[string]any{"status": status, "completed": completed, "count": job.EffectiveCount})
 	s.publish(notify.Event{Type: "job." + status, JobID: job.JobID, Status: status, Payload: payload})
 	return nil
@@ -312,6 +413,11 @@ func (s *Service) CancelJob(jobID string) error {
 	if err := s.Store.CancelJob(context.Background(), jobID); err != nil {
 		return err
 	}
+	logutil.Printf("job cancellation requested job_id=%s", jobID)
+	if err := s.Store.CancelOutstandingImages(context.Background(), jobID); err != nil {
+		return err
+	}
+	logutil.Printf("job cancelled job_id=%s", jobID)
 	s.publish(notify.Event{Type: "job.cancelled", JobID: jobID, Status: "cancelled"})
-	return s.Store.CancelOutstandingImages(context.Background(), jobID)
+	return nil
 }

@@ -3,8 +3,11 @@ package notify
 import (
 	"context"
 	"errors"
+	"io"
 	"net/smtp"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,16 +111,24 @@ func TestNotifyOnFinalFailureMarksFailedWhenSendFails(t *testing.T) {
 	ctx := context.Background()
 	createFailedJob(t, ctx, s)
 
-	mailer := Mailer{Config: config.EmailConfig{Enabled: true, From: "from@example.com", To: "to@example.com"}, Dialer: &stubDialer{err: errors.New("smtp failed")}}
-	if err := NotifyFailureIfNeeded(ctx, s, mailer, "job_1"); err != nil {
-		t.Fatalf("NotifyFailureIfNeeded returned error: %v", err)
-	}
+	mailer := Mailer{Config: config.EmailConfig{Enabled: true, From: "from@example.com", To: "to@example.com"}, Dialer: &stubDialer{err: errors.New("smtp secret failure")}}
+	stderr := captureStderr(t, func() {
+		if err := NotifyFailureIfNeeded(ctx, s, mailer, "job_1"); err != nil {
+			t.Fatalf("NotifyFailureIfNeeded returned error: %v", err)
+		}
+	})
 	got, _, err := s.GetJob(ctx, "job_1")
 	if err != nil {
 		t.Fatalf("GetJob returned error: %v", err)
 	}
 	if got.NotificationStatus != "failed" {
 		t.Fatalf("notification status = %q", got.NotificationStatus)
+	}
+	if !strings.Contains(stderr, "maintenance notification failed job_id=job_1 error_len=") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+	if strings.Contains(stderr, "smtp secret failure") {
+		t.Fatalf("stderr leaked raw smtp error: %q", stderr)
 	}
 }
 
@@ -181,6 +192,27 @@ func TestValidateEmailConfigRequiresAuthCode(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	originalStderr := os.Stderr
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe returned error: %v", err)
+	}
+	defer reader.Close()
+	os.Stderr = writer
+	defer func() { os.Stderr = originalStderr }()
+	fn()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("closing stderr writer returned error: %v", err)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("reading stderr returned error: %v", err)
+	}
+	return string(data)
 }
 
 func openNotificationStore(t *testing.T) *store.Store {

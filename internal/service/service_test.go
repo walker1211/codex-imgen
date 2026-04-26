@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	api "github.com/walker1211/codex-imgen/internal/api"
 	"github.com/walker1211/codex-imgen/internal/backend"
@@ -29,6 +31,23 @@ func (g *fakeGenerator) Generate(ctx context.Context, req backend.GenerateReques
 	g.mu.Unlock()
 	path := fmt.Sprintf("/tmp/%d.png", idx)
 	return backend.GenerateResult{Path: path, URI: "file://" + path}, nil
+}
+
+func TestTailStringKeepsValidUTF8(t *testing.T) {
+	limit := 10
+	got := tailString(strings.Repeat("前缀", 20)+"中文🙂tail", limit)
+	if !utf8.ValidString(got) {
+		t.Fatalf("tailString returned invalid UTF-8: %q", got)
+	}
+	if len(got) > limit {
+		t.Fatalf("len(tailString) = %d, want <= %d", len(got), limit)
+	}
+	if got := tailString("中文🙂", 0); got != "" {
+		t.Fatalf("tailString zero limit = %q", got)
+	}
+	if got := tailString("中文🙂", -1); got != "" {
+		t.Fatalf("tailString negative limit = %q", got)
+	}
 }
 
 func TestServiceCreateAndGetJob(t *testing.T) {
@@ -69,6 +88,65 @@ func TestServiceCreateAndGetJob(t *testing.T) {
 	t.Fatal("job did not complete in time")
 }
 
+type flakyGenerator struct {
+	mu        sync.Mutex
+	calls     int
+	failCalls int
+}
+
+func (g *flakyGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	g.mu.Lock()
+	g.calls++
+	calls := g.calls
+	failCalls := g.failCalls
+	g.mu.Unlock()
+	if failCalls == 0 {
+		failCalls = 1
+	}
+	if calls <= failCalls {
+		return backend.GenerateResult{}, errors.New("temporary codex failure")
+	}
+	return backend.GenerateResult{Path: "/tmp/retry-success.png", URI: "file:///tmp/retry-success.png", RawOutput: "thread output"}, nil
+}
+
+type alwaysFailGenerator struct{}
+
+func (g *alwaysFailGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	return backend.GenerateResult{}, errors.New("codex permanently failed")
+}
+
+type cancellableGenerator struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (g *cancellableGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	g.once.Do(func() { close(g.started) })
+	<-ctx.Done()
+	return backend.GenerateResult{}, ctx.Err()
+}
+
+type signalFailGenerator struct {
+	failed chan struct{}
+	once   sync.Once
+}
+
+func (g *signalFailGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	g.once.Do(func() { close(g.failed) })
+	return backend.GenerateResult{}, errors.New("first attempt failed")
+}
+
+type successAfterCancelGenerator struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (g *successAfterCancelGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	close(g.started)
+	<-g.release
+	return backend.GenerateResult{Path: "/tmp/cancel-race.png", URI: "file:///tmp/cancel-race.png"}, nil
+}
+
 func TestStoreCancelJobUpdatesStatus(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "imgen.db")
 	s, err := store.Open(dbPath)
@@ -93,6 +171,321 @@ func TestStoreCancelJobUpdatesStatus(t *testing.T) {
 	if got.Status != "cancelled" {
 		t.Fatalf("status = %q", got.Status)
 	}
+}
+
+func TestServiceRecordsAttemptHistoryWhenRetrySucceeds(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{
+		Store:                 s,
+		Generator:             &flakyGenerator{},
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           2,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "completed" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 2 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			if attempts[0].Attempt != 1 || attempts[0].Status != "failed" || !strings.Contains(attempts[0].LastError, "temporary codex failure") {
+				t.Fatalf("attempt 1 = %+v", attempts[0])
+			}
+			if attempts[1].Attempt != 2 || attempts[1].Status != "done" || attempts[1].Path != "/tmp/retry-success.png" {
+				t.Fatalf("attempt 2 = %+v", attempts[1])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job did not complete in time")
+}
+
+func TestServiceRecordsAllAttemptsWhenGenerationFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{
+		Store:                 s,
+		Generator:             &alwaysFailGenerator{},
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           2,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "failed" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 2 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			for _, attempt := range attempts {
+				if attempt.Status != "failed" || !strings.Contains(attempt.LastError, "codex permanently failed") {
+					t.Fatalf("attempt = %+v", attempt)
+				}
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job did not fail in time")
+}
+
+func TestServiceRecordsCancelledAttemptWhenGeneratorContextCancelled(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	gen := &cancellableGenerator{started: make(chan struct{})}
+	svc := Service{
+		Store:                 s,
+		Generator:             gen,
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           2,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	select {
+	case <-gen.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("generator did not start in time")
+	}
+	if err := svc.CancelJob(created.JobID); err != nil {
+		t.Fatalf("CancelJob returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 1 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			if attempts[0].Status != "cancelled" || attempts[0].Path != "" || attempts[0].URI != "" {
+				t.Fatalf("attempt = %+v", attempts[0])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job/image did not cancel in time")
+}
+
+func TestServiceRecordsCancelledAttemptAfterGenerateReturnsSuccess(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	gen := &successAfterCancelGenerator{started: make(chan struct{}), release: make(chan struct{})}
+	svc := Service{
+		Store:                 s,
+		Generator:             gen,
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           1,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	select {
+	case <-gen.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("generator did not start in time")
+	}
+	if err := svc.CancelJob(created.JobID); err != nil {
+		t.Fatalf("CancelJob returned error: %v", err)
+	}
+	close(gen.release)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 1 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			if attempts[0].Status != "cancelled" || attempts[0].Path != "" || attempts[0].URI != "" {
+				t.Fatalf("attempt = %+v", attempts[0])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job/image did not cancel in time")
+}
+
+func TestServiceRecordsCancelledAttemptDuringRetryDelay(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	gen := &signalFailGenerator{failed: make(chan struct{})}
+	svc := Service{
+		Store:                 s,
+		Generator:             gen,
+		RetryDelays:           []time.Duration{500 * time.Millisecond},
+		MaxAttempts:           2,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	select {
+	case <-gen.failed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first attempt did not fail in time")
+	}
+	if err := svc.CancelJob(created.JobID); err != nil {
+		t.Fatalf("CancelJob returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 2 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			if attempts[0].Attempt != 1 || attempts[0].Status != "failed" || !strings.Contains(attempts[0].LastError, "first attempt failed") {
+				t.Fatalf("attempt 1 = %+v", attempts[0])
+			}
+			if attempts[1].Attempt != 2 || attempts[1].Status != "cancelled" || attempts[1].Path != "" || attempts[1].URI != "" {
+				t.Fatalf("attempt 2 = %+v", attempts[1])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job/image did not cancel in time")
+}
+
+func TestServiceReusesLastRetryDelayWhenAttemptsExceedDelays(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{
+		Store:                 s,
+		Generator:             &flakyGenerator{failCalls: 2},
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           3,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        1,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(created.JobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == "completed" {
+			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
+			if err != nil {
+				t.Fatalf("ListImageAttempts returned error: %v", err)
+			}
+			if len(attempts) != 3 {
+				t.Fatalf("attempts = %d", len(attempts))
+			}
+			if attempts[0].Status != "failed" || attempts[1].Status != "failed" || attempts[2].Status != "done" {
+				t.Fatalf("attempts = %+v", attempts)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("job did not complete in time")
 }
 
 func TestServiceCreateJobClampsCountAndConcurrency(t *testing.T) {

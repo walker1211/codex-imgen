@@ -63,6 +63,56 @@ CREATE TABLE job_images (
 	if images[0].LastError != "" {
 		t.Fatalf("last error = %q", images[0].LastError)
 	}
+	if !store.HasTable("job_image_attempts") {
+		t.Fatal("expected job_image_attempts table to be created")
+	}
+	assertJobImageAttemptsSchema(t, store)
+	assertJobImageAttemptsUniqueConstraint(t, store)
+}
+
+func assertJobImageAttemptsSchema(t *testing.T, store *Store) {
+	t.Helper()
+
+	rows, err := store.db.Query(`PRAGMA table_info(job_image_attempts)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info returned error: %v", err)
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatalf("Scan returned error: %v", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows returned error: %v", err)
+	}
+
+	for _, name := range []string{"job_id", "image_index", "attempt", "status", "started_at", "finished_at", "duration_ms", "path", "uri", "last_error", "stdout_tail", "stderr_tail"} {
+		if !columns[name] {
+			t.Fatalf("expected job_image_attempts.%s column", name)
+		}
+	}
+}
+
+func assertJobImageAttemptsUniqueConstraint(t *testing.T, store *Store) {
+	t.Helper()
+
+	_, err := store.db.Exec(`INSERT INTO job_image_attempts (job_id, image_index, attempt, status) VALUES ('job_unique', 1, 1, 'running')`)
+	if err != nil {
+		t.Fatalf("insert attempt returned error: %v", err)
+	}
+	_, err = store.db.Exec(`INSERT INTO job_image_attempts (job_id, image_index, attempt, status) VALUES ('job_unique', 1, 1, 'running')`)
+	if err == nil {
+		t.Fatal("expected duplicate job_image_attempts insert to fail")
+	}
 }
 
 func TestOpenMigratesLegacySchemaWithImagesJSON(t *testing.T) {
@@ -114,4 +164,9 @@ CREATE TABLE job_images (
 	if job.ImagesJSON != "[]" {
 		t.Fatalf("images_json = %q", job.ImagesJSON)
 	}
+	if !store.HasTable("job_image_attempts") {
+		t.Fatal("expected job_image_attempts table to be created")
+	}
+	assertJobImageAttemptsSchema(t, store)
+	assertJobImageAttemptsUniqueConstraint(t, store)
 }

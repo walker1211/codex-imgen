@@ -24,6 +24,21 @@ type JobImage struct {
 	StartedAt  time.Time
 }
 
+type JobImageAttempt struct {
+	JobID      string
+	ImageIndex int
+	Attempt    int
+	Status     string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Path       string
+	URI        string
+	LastError  string
+	StdoutTail string
+	StderrTail string
+}
+
 type JobEvent struct {
 	JobID     string
 	EventType string

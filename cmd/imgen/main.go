@@ -11,6 +11,7 @@ import (
 	"github.com/walker1211/codex-imgen/internal/backend"
 	"github.com/walker1211/codex-imgen/internal/cli"
 	"github.com/walker1211/codex-imgen/internal/config"
+	"github.com/walker1211/codex-imgen/internal/logutil"
 	"github.com/walker1211/codex-imgen/internal/notify"
 	"github.com/walker1211/codex-imgen/internal/scheduler"
 	"github.com/walker1211/codex-imgen/internal/service"
@@ -48,12 +49,14 @@ func main() {
 	case "run":
 		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
 	case "serve":
-		st := mustOpenStore(home, cfg)
+		dataDir, dbPath := storagePaths(home, cfg)
+		st := mustOpenStore(dbPath)
 		defer st.Close()
 		hub := notify.NewWebSocketHub()
 		svc := &service.Service{Store: st, Generator: generator, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
 		handler := api.NewServerWithNotifier(svc, hub)
 		server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadTimeout: cfg.Server.ReadTimeout, WriteTimeout: cfg.Server.WriteTimeout}
+		logutil.Printf("service starting listen=%s data_dir=%s sqlite_path=%s", cfg.Server.Listen, dataDir, dbPath)
 		if err := notify.ValidateEmailConfig(cfg.Email); err != nil {
 			_, _ = os.Stderr.WriteString(err.Error() + "\n")
 			os.Exit(1)
@@ -69,7 +72,7 @@ func main() {
 	os.Exit(app.Run(ctx, os.Args[1:]))
 }
 
-func mustOpenStore(home string, cfg config.Config) *store.Store {
+func storagePaths(home string, cfg config.Config) (string, string) {
 	dataDir := cfg.Storage.DataDir
 	if dataDir == "" {
 		dataDir = filepath.Join(home, ".local", "share", "codex-imgen")
@@ -78,6 +81,10 @@ func mustOpenStore(home string, cfg config.Config) *store.Store {
 	if dbPath == "" {
 		dbPath = filepath.Join(dataDir, "imgen.db")
 	}
+	return dataDir, dbPath
+}
+
+func mustOpenStore(dbPath string) *store.Store {
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0o755)
 	st, err := store.Open(dbPath)
 	if err != nil {
