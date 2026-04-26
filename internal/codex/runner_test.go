@@ -44,6 +44,37 @@ func TestRunnerRunRecordsStreamingPhases(t *testing.T) {
 	}
 }
 
+func TestRunnerRunRecordsTurnCompletedUsage(t *testing.T) {
+	var phases []string
+	var details []string
+	result, err := (Runner{}).Run(context.Background(), Request{
+		Command: "sh",
+		Args:    []string{"-c", "printf '{\"type\":\"thread.started\",\"thread_id\":\"thread_123\"}\n'; printf '{\"type\":\"turn.started\"}\n'; printf '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":21514,\"cached_input_tokens\":2432,\"output_tokens\":541,\"reasoning_output_tokens\":115}}\n'"},
+		RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+			phases = append(phases, phase)
+			if phase == "stdout.turn_completed" {
+				details = append(details, detail)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "turn.completed") {
+		t.Fatalf("stdout = %q", result.Stdout)
+	}
+	if !phaseBefore(phases, "stdout.turn_started", "stdout.turn_completed") {
+		t.Fatalf("expected stdout.turn_started before stdout.turn_completed, phases=%#v", phases)
+	}
+	if !phaseBefore(phases, "stdout.turn_completed", "process.exited") {
+		t.Fatalf("expected stdout.turn_completed before process.exited, phases=%#v", phases)
+	}
+	wantDetails := []string{"input_tokens=21514 cached_input_tokens=2432 output_tokens=541 reasoning_output_tokens=115"}
+	if !reflect.DeepEqual(details, wantDetails) {
+		t.Fatalf("details = %#v, want %#v", details, wantDetails)
+	}
+}
+
 func TestRunnerRunRecordsStderrFirstLine(t *testing.T) {
 	var phases []string
 	result, err := (Runner{}).Run(context.Background(), Request{

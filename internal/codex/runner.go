@@ -214,6 +214,7 @@ func stdoutPhaseRecorder(ctx context.Context, codexHome string, record func(stri
 	seenFirst := false
 	seenThread := false
 	seenTurn := false
+	seenTurnCompleted := false
 	seenSavedTo := false
 	startedDetector := false
 	return func(line string) {
@@ -222,10 +223,16 @@ func stdoutPhaseRecorder(ctx context.Context, codexHome string, record func(stri
 			record("stdout.first_line", "line_len="+strconv.Itoa(len(line)))
 		}
 		trimmed := strings.TrimSpace(line)
-		if !seenThread || !seenTurn || !startedDetector {
+		if !seenThread || !seenTurn || !seenTurnCompleted || !startedDetector {
 			var event struct {
 				Type     string `json:"type"`
 				ThreadID string `json:"thread_id"`
+				Usage    struct {
+					InputTokens           int `json:"input_tokens"`
+					CachedInputTokens     int `json:"cached_input_tokens"`
+					OutputTokens          int `json:"output_tokens"`
+					ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+				} `json:"usage"`
 			}
 			if strings.HasPrefix(trimmed, "{") && json.Unmarshal([]byte(trimmed), &event) == nil {
 				if event.Type == "thread.started" {
@@ -242,6 +249,10 @@ func stdoutPhaseRecorder(ctx context.Context, codexHome string, record func(stri
 					seenTurn = true
 					record("stdout.turn_started", "")
 				}
+				if event.Type == "turn.completed" && !seenTurnCompleted {
+					seenTurnCompleted = true
+					record("stdout.turn_completed", turnCompletedDetail(event.Usage.InputTokens, event.Usage.CachedInputTokens, event.Usage.OutputTokens, event.Usage.ReasoningOutputTokens))
+				}
 			}
 		}
 		if !seenSavedTo && (strings.HasPrefix(trimmed, "Saved to:") || strings.HasPrefix(trimmed, "file://")) {
@@ -249,6 +260,13 @@ func stdoutPhaseRecorder(ctx context.Context, codexHome string, record func(stri
 			record("stdout.saved_to", "line_len="+strconv.Itoa(len(line)))
 		}
 	}
+}
+
+func turnCompletedDetail(inputTokens int, cachedInputTokens int, outputTokens int, reasoningOutputTokens int) string {
+	return "input_tokens=" + strconv.Itoa(inputTokens) +
+		" cached_input_tokens=" + strconv.Itoa(cachedInputTokens) +
+		" output_tokens=" + strconv.Itoa(outputTokens) +
+		" reasoning_output_tokens=" + strconv.Itoa(reasoningOutputTokens)
 }
 
 func stderrPhaseRecorder(record func(string, string)) func(string) {

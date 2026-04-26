@@ -208,7 +208,9 @@ sqlite3 .data/imgen.db \
 - `process.started` 很晚：启动 Codex CLI 或系统调度慢。
 - `stdout.thread_started` 很晚：Codex CLI 初始化、网络或会话创建慢。
 - `stdout.turn_started` 到 `image.file_detected` 很久：主要耗时在图片生成或落盘等待。
-- `image.file_detected` 到 `process.exited` 很久：图片文件已出现，但 Codex CLI 收尾退出较慢。
+- `image.file_detected` 到 `stdout.turn_completed` 很久：图片文件已出现，但 Codex turn 还在完成最终响应或内部收尾。
+- `stdout.turn_completed` 到 `process.exited` 很久：Codex turn 已完成，但 CLI 进程退出较慢。
+- 如果没有 `stdout.turn_completed`，`image.file_detected` 到 `process.exited` 很久：图片文件已出现，但 Codex CLI 收尾退出较慢。
 - 如果没有 `image.file_detected`，`stdout.turn_started` 到 `stdout.saved_to` / `process.exited` 很久：主要耗时仍在模型或 imagegen 工具执行链路。
 - `process.exited` 到 `parser.completed` 很久：本地解析或 generated_images 目录查找慢。
 

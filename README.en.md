@@ -208,7 +208,9 @@ Common interpretation:
 - Late `process.started`: Codex CLI startup or OS scheduling is slow.
 - Late `stdout.thread_started`: Codex CLI initialization, network, or session creation is slow.
 - Long gap from `stdout.turn_started` to `image.file_detected`: most time is waiting for image generation or file availability.
-- Long gap from `image.file_detected` to `process.exited`: the image file is already present, but Codex CLI cleanup/exit is slow.
+- Long gap from `image.file_detected` to `stdout.turn_completed`: the image file is already present, but Codex is still completing its final response or internal turn cleanup.
+- Long gap from `stdout.turn_completed` to `process.exited`: the Codex turn is complete, but the CLI process exit is slow.
+- If `stdout.turn_completed` is missing, a long gap from `image.file_detected` to `process.exited` means the image file is already present, but Codex CLI cleanup/exit is slow.
 - If `image.file_detected` is missing, a long gap from `stdout.turn_started` to `stdout.saved_to` / `process.exited` still points to the model or imagegen tool execution chain.
 - Long gap from `process.exited` to `parser.completed`: local parsing or generated_images directory lookup is slow.
 
