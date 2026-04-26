@@ -33,6 +33,38 @@ func (g *fakeGenerator) Generate(ctx context.Context, req backend.GenerateReques
 	return backend.GenerateResult{Path: path, URI: "file://" + path}, nil
 }
 
+type phaseGenerator struct{}
+
+func (g *phaseGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	req.RecordPhase("process.started", time.Unix(100, 100_000_000), "")
+	req.RecordPhase("stdout.turn_started", time.Unix(100, 250_000_000), "")
+	return backend.GenerateResult{Path: "/tmp/phase.png", URI: "file:///tmp/phase.png", RawOutput: "phase output"}, nil
+}
+
+type phaseFailStore struct {
+	*store.Store
+}
+
+func (s phaseFailStore) RecordImageAttemptPhase(ctx context.Context, jobID string, imageIndex int, attempt int, phase string, occurredAt time.Time, elapsedMS int64, detail string) error {
+	return errors.New("phase write failed")
+}
+
+func waitForJobStatus(t *testing.T, svc *Service, jobID string, status string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := svc.GetJob(jobID)
+		if err != nil {
+			t.Fatalf("GetJob returned error: %v", err)
+		}
+		if got.Status == status {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("job %s did not reach status %s", jobID, status)
+}
+
 func TestTailStringKeepsValidUTF8(t *testing.T) {
 	limit := 10
 	got := tailString(strings.Repeat("前缀", 20)+"中文🙂tail", limit)
@@ -171,6 +203,54 @@ func TestStoreCancelJobUpdatesStatus(t *testing.T) {
 	if got.Status != "cancelled" {
 		t.Fatalf("status = %q", got.Status)
 	}
+}
+
+func TestServiceRecordsAttemptPhases(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	now := time.Unix(100, 0)
+	svc := Service{Store: s, Generator: &phaseGenerator{}, PromptPrefix: "$imagegen", Now: func() time.Time { return now }}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+	waitForJobStatus(t, &svc, created.JobID, "completed")
+
+	phases, err := s.ListImageAttemptPhases(context.Background(), created.JobID)
+	if err != nil {
+		t.Fatalf("ListImageAttemptPhases returned error: %v", err)
+	}
+	if len(phases) != 2 {
+		t.Fatalf("expected 2 phases, got %d: %+v", len(phases), phases)
+	}
+	if phases[0].Phase != "process.started" || phases[0].ElapsedMS != 100 {
+		t.Fatalf("unexpected first phase: %+v", phases[0])
+	}
+	if phases[1].Phase != "stdout.turn_started" || phases[1].ElapsedMS != 250 {
+		t.Fatalf("unexpected second phase: %+v", phases[1])
+	}
+}
+
+func TestServiceIgnoresAttemptPhaseWriteFailure(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer st.Close()
+
+	now := time.Unix(100, 0)
+	svc := Service{Store: phaseFailStore{Store: st}, Generator: &phaseGenerator{}, PromptPrefix: "$imagegen", Now: func() time.Time { return now }}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+	waitForJobStatus(t, &svc, created.JobID, "completed")
 }
 
 func TestServiceRecordsAttemptHistoryWhenRetrySucceeds(t *testing.T) {

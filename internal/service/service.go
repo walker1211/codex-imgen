@@ -31,6 +31,7 @@ type JobStore interface {
 	UpdateImageResult(context.Context, string, int, string, string, string) error
 	StartImageAttempt(context.Context, string, int, int, time.Time) error
 	FinishImageAttempt(context.Context, string, int, int, string, time.Time, string, string, string, string, string) error
+	RecordImageAttemptPhase(context.Context, string, int, int, string, time.Time, int64, string) error
 	CancelOutstandingImages(context.Context, string) error
 }
 
@@ -271,7 +272,24 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 					return
 				}
 				logutil.Printf("image attempt started job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
-				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompt, Images: jobImages})
+				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{
+					Prompt:     prompt,
+					Images:     jobImages,
+					JobID:      job.JobID,
+					ImageIndex: index,
+					Attempt:    attempt,
+					RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+						elapsedMS := occurredAt.Sub(attemptStarted).Milliseconds()
+						if elapsedMS < 0 {
+							elapsedMS = 0
+						}
+						if err := s.Store.RecordImageAttemptPhase(context.Background(), job.JobID, index, attempt, phase, occurredAt, elapsedMS, tailString(detail, 500)); err != nil {
+							logutil.Warnf("codex phase record failed job_id=%s image_index=%d attempt=%d phase=%s error_len=%d", job.JobID, index, attempt, phase, len(err.Error()))
+							return
+						}
+						logutil.Printf("codex phase job_id=%s image_index=%d attempt=%d phase=%s elapsed_ms=%d", job.JobID, index, attempt, phase, elapsedMS)
+					},
+				})
 				finishedAt := s.now()
 				if err == nil {
 					if ctx.Err() != nil {

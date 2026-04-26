@@ -39,6 +39,16 @@ type JobImageAttempt struct {
 	StderrTail string
 }
 
+type JobImageAttemptPhase struct {
+	JobID        string
+	ImageIndex   int
+	Attempt      int
+	Phase        string
+	OccurredAtMS int64
+	ElapsedMS    int64
+	Detail       string
+}
+
 type JobEvent struct {
 	JobID     string
 	EventType string

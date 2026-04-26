@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,17 +51,32 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 		runner = codex.Runner{}
 	}
 	result, err := runner.Run(ctx, codex.Request{
-		Command: b.command(),
-		Args:    args,
-		Env:     os.Environ(),
-		Timeout: b.timeout(),
+		Command:   b.command(),
+		Args:      args,
+		Env:       os.Environ(),
+		Timeout:   b.timeout(),
+		CodexHome: b.codexHome(),
+		RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+			if req.RecordPhase != nil {
+				req.RecordPhase(phase, occurredAt, detail)
+			}
+		},
 	})
 	if err != nil {
 		return GenerateResult{}, fmt.Errorf("codex exec failed: %s", formatCommandError(err, result))
 	}
+	if req.RecordPhase != nil {
+		req.RecordPhase("parser.started", time.Now(), "")
+	}
 	parsed, err := parser.ExtractImageResult(result.Stdout, b.codexHome())
 	if err != nil {
+		if req.RecordPhase != nil {
+			req.RecordPhase("parser.failed", time.Now(), "error_len="+strconv.Itoa(len(err.Error())))
+		}
 		return GenerateResult{}, err
+	}
+	if req.RecordPhase != nil {
+		req.RecordPhase("parser.completed", time.Now(), "path_len="+strconv.Itoa(len(parsed.Path)))
 	}
 	return GenerateResult{Path: parsed.Path, URI: parsed.URI, RawOutput: result.Stdout + result.Stderr}, nil
 }

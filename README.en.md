@@ -196,6 +196,22 @@ sqlite3 .data/imgen.db \
   "select job_id,image_index,attempt,status,duration_ms,path,last_error from job_image_attempts where job_id='<job-id>' order by image_index,attempt;"
 ```
 
+To locate which part of one Codex CLI invocation is slow, inspect phase details:
+
+```bash
+sqlite3 .data/imgen.db \
+  "select image_index,attempt,phase,elapsed_ms,detail from job_image_attempt_phases where job_id='<job-id>' order by image_index,attempt,occurred_at_ms;"
+```
+
+Common interpretation:
+
+- Late `process.started`: Codex CLI startup or OS scheduling is slow.
+- Late `stdout.thread_started`: Codex CLI initialization, network, or session creation is slow.
+- Long gap from `stdout.turn_started` to `image.file_detected`: most time is waiting for image generation or file availability.
+- Long gap from `image.file_detected` to `process.exited`: the image file is already present, but Codex CLI cleanup/exit is slow.
+- If `image.file_detected` is missing, a long gap from `stdout.turn_started` to `stdout.saved_to` / `process.exited` still points to the model or imagegen tool execution chain.
+- Long gap from `process.exited` to `parser.completed`: local parsing or generated_images directory lookup is slow.
+
 ## WebSocket
 
 The service exposes `/ws?job_id=<job-id>` for job-scoped event subscriptions. Current event types include:

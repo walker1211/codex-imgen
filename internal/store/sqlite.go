@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS job_image_attempts (
   stderr_tail TEXT NOT NULL DEFAULT '',
   UNIQUE(job_id, image_index, attempt)
 );
+CREATE TABLE IF NOT EXISTS job_image_attempt_phases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL,
+  image_index INTEGER NOT NULL,
+  attempt INTEGER NOT NULL,
+  phase TEXT NOT NULL,
+  occurred_at_ms INTEGER NOT NULL,
+  elapsed_ms INTEGER NOT NULL DEFAULT 0,
+  detail TEXT NOT NULL DEFAULT '',
+  UNIQUE(job_id, image_index, attempt, phase)
+);
 `
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err

@@ -68,6 +68,7 @@ CREATE TABLE job_images (
 	}
 	assertJobImageAttemptsSchema(t, store)
 	assertJobImageAttemptsUniqueConstraint(t, store)
+	assertJobImageAttemptPhasesTable(t, store)
 }
 
 func assertJobImageAttemptsSchema(t *testing.T, store *Store) {
@@ -112,6 +113,60 @@ func assertJobImageAttemptsUniqueConstraint(t *testing.T, store *Store) {
 	_, err = store.db.Exec(`INSERT INTO job_image_attempts (job_id, image_index, attempt, status) VALUES ('job_unique', 1, 1, 'running')`)
 	if err == nil {
 		t.Fatal("expected duplicate job_image_attempts insert to fail")
+	}
+}
+
+func assertJobImageAttemptPhasesTable(t *testing.T, store *Store) {
+	t.Helper()
+	if !store.HasTable("job_image_attempt_phases") {
+		t.Fatal("expected job_image_attempt_phases table to be created")
+	}
+	assertJobImageAttemptPhasesSchema(t, store)
+	assertJobImageAttemptPhasesUniqueConstraint(t, store)
+}
+
+func assertJobImageAttemptPhasesSchema(t *testing.T, store *Store) {
+	t.Helper()
+
+	rows, err := store.db.Query(`PRAGMA table_info(job_image_attempt_phases)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info phases returned error: %v", err)
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatalf("Scan phase column returned error: %v", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("phase rows returned error: %v", err)
+	}
+
+	for _, name := range []string{"id", "job_id", "image_index", "attempt", "phase", "occurred_at_ms", "elapsed_ms", "detail"} {
+		if !columns[name] {
+			t.Fatalf("expected job_image_attempt_phases.%s column", name)
+		}
+	}
+}
+
+func assertJobImageAttemptPhasesUniqueConstraint(t *testing.T, store *Store) {
+	t.Helper()
+
+	_, err := store.db.Exec(`INSERT INTO job_image_attempt_phases (job_id, image_index, attempt, phase, occurred_at_ms) VALUES ('job_unique_phase', 1, 1, 'process.started', 1000)`)
+	if err != nil {
+		t.Fatalf("insert phase returned error: %v", err)
+	}
+	_, err = store.db.Exec(`INSERT INTO job_image_attempt_phases (job_id, image_index, attempt, phase, occurred_at_ms) VALUES ('job_unique_phase', 1, 1, 'process.started', 1000)`)
+	if err == nil {
+		t.Fatal("expected duplicate job_image_attempt_phases insert to fail")
 	}
 }
 
@@ -169,4 +224,5 @@ CREATE TABLE job_images (
 	}
 	assertJobImageAttemptsSchema(t, store)
 	assertJobImageAttemptsUniqueConstraint(t, store)
+	assertJobImageAttemptPhasesTable(t, store)
 }

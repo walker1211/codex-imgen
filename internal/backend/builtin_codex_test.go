@@ -82,3 +82,63 @@ func TestBuiltinCodexGenerateBuildsExecArgsWithImages(t *testing.T) {
 		t.Fatalf("args = %#v, want %#v", runner.req.Args, want)
 	}
 }
+
+func TestBuiltinCodexGeneratePassesCodexHome(t *testing.T) {
+	runner := &recordingRunner{}
+	codexHome := t.TempDir()
+	backend := BuiltinCodex{Command: "codex", CodexHome: codexHome, Runner: runner}
+	_, _ = backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if runner.req.CodexHome != codexHome {
+		t.Fatalf("CodexHome = %q, want %q", runner.req.CodexHome, codexHome)
+	}
+}
+
+func TestBuiltinCodexGenerateRecordsParserPhases(t *testing.T) {
+	var phases []string
+	backend := BuiltinCodex{Command: "codex", Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+		return codex.RunResult{Stdout: "Saved to: file:///tmp/1.png\n"}, nil
+	})}
+
+	_, err := backend.Generate(context.Background(), GenerateRequest{
+		Prompt: "$imagegen draw a dragon",
+		RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+			phases = append(phases, phase)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	want := []string{"parser.started", "parser.completed"}
+	if !reflect.DeepEqual(phases, want) {
+		t.Fatalf("phases = %#v, want %#v", phases, want)
+	}
+}
+
+func TestBuiltinCodexGenerateRecordsParserFailed(t *testing.T) {
+	var phases []string
+	backend := BuiltinCodex{Command: "codex", Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+		return codex.RunResult{Stdout: "no image path\n"}, nil
+	})}
+
+	_, err := backend.Generate(context.Background(), GenerateRequest{
+		Prompt: "$imagegen draw a dragon",
+		RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+			phases = append(phases, phase)
+		},
+	})
+	if err == nil {
+		t.Fatal("expected parser error")
+	}
+
+	want := []string{"parser.started", "parser.failed"}
+	if !reflect.DeepEqual(phases, want) {
+		t.Fatalf("phases = %#v, want %#v", phases, want)
+	}
+}
+
+type commandRunnerFunc func(context.Context, codex.Request) (codex.RunResult, error)
+
+func (f commandRunnerFunc) Run(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+	return f(ctx, req)
+}
