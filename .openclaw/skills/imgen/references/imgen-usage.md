@@ -17,7 +17,7 @@ bash ./build.sh
 ./imgen --help
 ```
 
-The `.env` file is only needed when email secrets are enabled. The CLI reads `configs/config.yaml` from the current working directory.
+The `.env` file is only needed when email secrets are enabled. The CLI reads `configs/config.yaml` from the current working directory. When an agent uses shell or exec tools, prefer setting `cwd` to `<repo-root>` before running `./imgen`; if `cwd` cannot be set, prefix the command with `cd <repo-root> &&`.
 
 ## Synchronous text-to-image
 
@@ -109,10 +109,13 @@ Important config fields:
 
 For CLI usage, OpenClaw should provide:
 
-- Working directory containing `configs/config.yaml`.
+- `cwd`: `<repo-root>`.
+- `command`: the `./imgen ...` command to run from that cwd.
 - Prompt string.
 - Optional local image paths.
 - Optional `count`, `concurrency`, and `json` output choice.
+
+If an execution tool cannot set `cwd`, use `cd <repo-root> && ./imgen ...` as the shell command.
 
 For service usage, OpenClaw should:
 

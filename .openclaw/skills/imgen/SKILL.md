@@ -28,7 +28,18 @@ Default to synchronous CLI unless the user explicitly needs background execution
 
 ## Required working directory
 
-Run `./imgen` from a directory that contains `configs/config.yaml`, or from a configured deployment directory where `imgen` can find that config.
+When using shell or exec tools, set `cwd` to `<repo-root>` and run `./imgen` from there:
+
+```text
+cwd: <repo-root>
+command: ./imgen submit "生成一张 Q 版小龙吉祥物，白底，单图"
+```
+
+If the tool cannot set `cwd`, prefix the shell command instead:
+
+```bash
+cd <repo-root> && ./imgen submit "生成一张 Q 版小龙吉祥物，白底，单图"
+```
 
 Do not put secrets in chat, prompts, or generated commands. Secret values such as `EMAIL_SMTP_AUTH_CODE` belong in `.env`.
 
