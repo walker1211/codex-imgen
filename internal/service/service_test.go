@@ -49,6 +49,14 @@ func (s phaseFailStore) RecordImageAttemptPhase(ctx context.Context, jobID strin
 	return errors.New("phase write failed")
 }
 
+type attemptFinishFailStore struct {
+	*store.Store
+}
+
+func (s attemptFinishFailStore) FinishImageAttempt(ctx context.Context, jobID string, imageIndex int, attempt int, status string, finishedAt time.Time, path string, uri string, lastError string, rawOutput string, finalMessage string) error {
+	return errors.New("attempt finish failed")
+}
+
 func waitForJobStatus(t *testing.T, svc *Service, jobID string, status string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -63,6 +71,17 @@ func waitForJobStatus(t *testing.T, svc *Service, jobID string, status string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("job %s did not reach status %s", jobID, status)
+}
+
+func createRunningJobAttempt(t *testing.T, s *store.Store, jobID string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := s.CreateJob(ctx, store.Job{JobID: jobID, Prompt: "x", RequestedCount: 1, EffectiveCount: 1, RequestedConcurrency: 1, EffectiveConcurrency: 1, Status: "running"}, []store.JobImage{{JobID: jobID, ImageIndex: 1, Status: "running"}}); err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+	if err := s.StartImageAttempt(ctx, jobID, 1, 1, time.Unix(100, 0)); err != nil {
+		t.Fatalf("StartImageAttempt returned error: %v", err)
+	}
 }
 
 func TestTailStringKeepsValidUTF8(t *testing.T) {
@@ -233,6 +252,146 @@ func TestServiceRecordsAttemptPhases(t *testing.T) {
 	}
 	if phases[1].Phase != "stdout.turn_started" || phases[1].ElapsedMS != 250 {
 		t.Fatalf("unexpected second phase: %+v", phases[1])
+	}
+}
+
+func TestServiceFinishCancelledImageAttemptRecordsAttemptAndCancelsImage(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	jobID := "job_1"
+	createRunningJobAttempt(t, s, jobID)
+
+	pub := &capturePublisher{}
+	svc := Service{Store: s, Publisher: pub}
+	svc.finishCancelledImageAttempt(jobID, 1, 1, time.Unix(101, 0), "cancelled error")
+
+	attempts, err := s.ListImageAttempts(ctx, jobID)
+	if err != nil {
+		t.Fatalf("ListImageAttempts returned error: %v", err)
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("attempts = %d", len(attempts))
+	}
+	if attempts[0].Status != "cancelled" || attempts[0].LastError != "cancelled error" || attempts[0].Path != "" || attempts[0].URI != "" {
+		t.Fatalf("attempt = %+v", attempts[0])
+	}
+	_, images, err := s.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("GetJob returned error: %v", err)
+	}
+	if len(images) != 1 || images[0].Status != "cancelled" {
+		t.Fatalf("images = %+v", images)
+	}
+	events := pub.Events()
+	if len(events) != 1 || events[0].Type != "image.cancelled" || events[0].JobID != jobID || events[0].Index != 1 || events[0].Status != "cancelled" {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestServiceFinishFailedImageAttemptRecordsAttemptWithoutFailingImage(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	jobID := "job_1"
+	createRunningJobAttempt(t, s, jobID)
+
+	pub := &capturePublisher{}
+	svc := Service{Store: s, Publisher: pub}
+	if !svc.finishFailedImageAttempt(jobID, 1, 1, time.Unix(101, 0), "failed error") {
+		t.Fatal("finishFailedImageAttempt returned false")
+	}
+
+	attempts, err := s.ListImageAttempts(ctx, jobID)
+	if err != nil {
+		t.Fatalf("ListImageAttempts returned error: %v", err)
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("attempts = %d", len(attempts))
+	}
+	if attempts[0].Status != "failed" || attempts[0].LastError != "failed error" || attempts[0].Path != "" || attempts[0].URI != "" {
+		t.Fatalf("attempt = %+v", attempts[0])
+	}
+	_, images, err := s.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("GetJob returned error: %v", err)
+	}
+	if len(images) != 1 || images[0].Status != "running" {
+		t.Fatalf("images = %+v", images)
+	}
+	if events := pub.Events(); len(events) != 0 {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestServiceFinishFailedImageAttemptFailsImageWhenAttemptWriteFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	jobID := "job_1"
+	createRunningJobAttempt(t, s, jobID)
+
+	pub := &capturePublisher{}
+	svc := Service{Store: attemptFinishFailStore{Store: s}, Publisher: pub}
+	if svc.finishFailedImageAttempt(jobID, 1, 1, time.Unix(101, 0), "failed error") {
+		t.Fatal("finishFailedImageAttempt returned true")
+	}
+
+	_, images, err := s.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("GetJob returned error: %v", err)
+	}
+	if len(images) != 1 || images[0].Status != "failed" {
+		t.Fatalf("images = %+v", images)
+	}
+	events := pub.Events()
+	if len(events) != 1 || events[0].Type != "image.failed" || events[0].JobID != jobID || events[0].Index != 1 || events[0].Status != "failed" {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestServiceRecordImageAttemptPhaseClampsNegativeElapsedAndTailsDetail(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{Store: s}
+	detail := strings.Repeat("前缀", 200) + "tail"
+	svc.recordImageAttemptPhase("job_1", 1, 1, time.Unix(100, 0), "process.started", time.Unix(99, 0), detail)
+
+	phases, err := s.ListImageAttemptPhases(context.Background(), "job_1")
+	if err != nil {
+		t.Fatalf("ListImageAttemptPhases returned error: %v", err)
+	}
+	if len(phases) != 1 {
+		t.Fatalf("phases = %d", len(phases))
+	}
+	if phases[0].ElapsedMS != 0 {
+		t.Fatalf("elapsed ms = %d", phases[0].ElapsedMS)
+	}
+	if len(phases[0].Detail) > 500 {
+		t.Fatalf("detail len = %d", len(phases[0].Detail))
+	}
+	if !strings.HasSuffix(phases[0].Detail, "tail") {
+		t.Fatalf("detail = %q", phases[0].Detail)
 	}
 }
 
