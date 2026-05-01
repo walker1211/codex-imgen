@@ -26,10 +26,7 @@ func (e LocalEngine) RunSync(ctx context.Context, req SyncRequest) (result.Resul
 		req.Concurrency = req.Count
 	}
 
-	prompts := make([]string, req.Count)
-	for i := 0; i < req.Count; i++ {
-		prompts[i] = codex.BuildPrompt(e.Prelude, e.Prefix, req.Prompt)
-	}
+	prompt := codex.BuildPrompt(e.Prelude, e.Prefix, req.Prompt)
 
 	images := make([]result.ImageResult, req.Count)
 	sem := make(chan struct{}, req.Concurrency)
@@ -38,15 +35,15 @@ func (e LocalEngine) RunSync(ctx context.Context, req SyncRequest) (result.Resul
 	defer cancel()
 	var wg sync.WaitGroup
 	for i := 0; i < req.Count; i++ {
+		index := i
 		wg.Go(func() {
-			index := i
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
 				return
 			}
 			defer func() { <-sem }()
-			generated, err := e.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompts[index], Images: req.Images})
+			generated, err := e.Generator.Generate(ctx, backend.GenerateRequest{Prompt: prompt, Images: req.Images})
 			if err != nil {
 				select {
 				case errCh <- err:

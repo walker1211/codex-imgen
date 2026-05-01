@@ -238,11 +238,13 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 	_ = s.Store.UpdateJobStatus(ctx, job.JobID, "running")
 	logutil.Printf("job started job_id=%s count=%d concurrency=%d", job.JobID, job.EffectiveCount, job.EffectiveConcurrency)
 	s.publish(notify.Event{Type: "job.started", JobID: job.JobID, Status: "running"})
+	prompt := codex.BuildPrompt(s.PromptPrelude, s.PromptPrefix, job.Prompt)
+	jobImages, jobImagesErr := decodeJobImages(job)
 	sem := make(chan struct{}, job.EffectiveConcurrency)
 	var wg sync.WaitGroup
 	for i := 1; i <= job.EffectiveCount; i++ {
+		index := i
 		wg.Go(func() {
-			index := i
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -253,9 +255,7 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 			_ = s.Store.StartImageRun(ctx, job.JobID, index, s.now())
 			logutil.Printf("image started job_id=%s image_index=%d", job.JobID, index)
 			s.publish(notify.Event{Type: "image.started", JobID: job.JobID, Index: index, Status: "running"})
-			prompt := codex.BuildPrompt(s.PromptPrelude, s.PromptPrefix, job.Prompt)
-			jobImages, err := decodeJobImages(job)
-			if err != nil {
+			if jobImagesErr != nil {
 				s.failImage(job.JobID, index)
 				return
 			}
@@ -355,10 +355,8 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 					}
 				}
 			}
-			_ = s.Store.UpdateImageStatus(context.Background(), job.JobID, index, "failed")
 			logutil.Warnf("final image failed job_id=%s image_index=%d attempts=%d", job.JobID, index, attempts)
-			logutil.Warnf("image failed job_id=%s image_index=%d", job.JobID, index)
-			s.publish(notify.Event{Type: "image.failed", JobID: job.JobID, Index: index, Status: "failed"})
+			s.failImage(job.JobID, index)
 		})
 	}
 	wg.Wait()
