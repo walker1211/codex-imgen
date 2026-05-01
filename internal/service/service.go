@@ -252,114 +252,122 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 				return
 			}
 			defer func() { <-sem }()
-			_ = s.Store.StartImageRun(ctx, job.JobID, index, s.now())
-			logutil.Printf("image started job_id=%s image_index=%d", job.JobID, index)
-			s.publish(notify.Event{Type: "image.started", JobID: job.JobID, Index: index, Status: "running"})
-			if jobImagesErr != nil {
-				s.failImage(job.JobID, index)
-				return
-			}
-			attempts := s.maxAttempts()
-			for attempt := 1; attempt <= attempts; attempt++ {
-				attemptStarted := s.now()
-				if err := s.Store.StartImageAttempt(ctx, job.JobID, index, attempt, attemptStarted); err != nil {
-					if ctx.Err() != nil {
-						s.cancelImage(job.JobID, index)
-						return
-					}
-					s.failImage(job.JobID, index)
-					return
-				}
-				logutil.Printf("image attempt started job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
-				generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{
-					Prompt:     prompt,
-					Images:     jobImages,
-					JobID:      job.JobID,
-					ImageIndex: index,
-					Attempt:    attempt,
-					RecordPhase: func(phase string, occurredAt time.Time, detail string) {
-						elapsedMS := occurredAt.Sub(attemptStarted).Milliseconds()
-						if elapsedMS < 0 {
-							elapsedMS = 0
-						}
-						if err := s.Store.RecordImageAttemptPhase(context.Background(), job.JobID, index, attempt, phase, occurredAt, elapsedMS, tailString(detail, 500)); err != nil {
-							logutil.Warnf("codex phase record failed job_id=%s image_index=%d attempt=%d phase=%s error_len=%d", job.JobID, index, attempt, phase, len(err.Error()))
-							return
-						}
-						logutil.Printf("codex phase job_id=%s image_index=%d attempt=%d phase=%s elapsed_ms=%d", job.JobID, index, attempt, phase, elapsedMS)
-					},
-				})
-				finishedAt := s.now()
-				if err == nil {
-					if ctx.Err() != nil {
-						if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
-							s.cancelImage(job.JobID, index)
-							return
-						}
-						logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
-						s.cancelImage(job.JobID, index)
-						return
-					}
-					if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "done", finishedAt, generated.Path, generated.URI, "", tailString(generated.RawOutput, 2000), ""); err != nil {
-						s.failImage(job.JobID, index)
-						return
-					}
-					logutil.Printf("image attempt succeeded job_id=%s image_index=%d attempt=%d path=%s", job.JobID, index, attempt, generated.Path)
-					if err := s.Store.UpdateImageResult(context.Background(), job.JobID, index, "done", generated.Path, generated.URI); err != nil {
-						if ctx.Err() != nil {
-							s.cancelImage(job.JobID, index)
-							return
-						}
-						s.failImage(job.JobID, index)
-						return
-					}
-					logutil.Printf("image completed job_id=%s image_index=%d path=%s", job.JobID, index, generated.Path)
-					payload, _ := json.Marshal(map[string]any{"status": "done", "path": generated.Path, "uri": generated.URI})
-					s.publish(notify.Event{Type: "image.completed", JobID: job.JobID, Index: index, Status: "done", Path: generated.Path, Payload: payload})
-					return
-				}
-				lastError := tailString(err.Error(), 2000)
-				if ctx.Err() != nil {
-					if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", lastError, "", ""); err != nil {
-						s.cancelImage(job.JobID, index)
-						return
-					}
-					logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
-					s.cancelImage(job.JobID, index)
-					return
-				}
-				if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "failed", finishedAt, "", "", lastError, "", ""); err != nil {
-					s.failImage(job.JobID, index)
-					return
-				}
-				logutil.Warnf("image attempt failed job_id=%s image_index=%d attempt=%d error_len=%d", job.JobID, index, attempt, len(lastError))
-				if attempt < attempts {
-					delay := s.retryDelay(attempt)
-					logutil.Printf("image retry scheduled job_id=%s image_index=%d next_attempt=%d delay=%s", job.JobID, index, attempt+1, delay)
-					select {
-					case <-time.After(delay):
-					case <-ctx.Done():
-						nextAttempt := attempt + 1
-						cancelledAt := s.now()
-						if err := s.Store.StartImageAttempt(context.Background(), job.JobID, index, nextAttempt, cancelledAt); err != nil {
-							s.cancelImage(job.JobID, index)
-							return
-						}
-						if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, nextAttempt, "cancelled", cancelledAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
-							s.cancelImage(job.JobID, index)
-							return
-						}
-						logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, nextAttempt)
-						s.cancelImage(job.JobID, index)
-						return
-					}
-				}
-			}
-			logutil.Warnf("final image failed job_id=%s image_index=%d attempts=%d", job.JobID, index, attempts)
-			s.failImage(job.JobID, index)
+			s.runJobImage(ctx, job, index, prompt, jobImages, jobImagesErr)
 		})
 	}
 	wg.Wait()
+	return s.finishJob(job)
+}
+
+func (s *Service) runJobImage(ctx context.Context, job store.Job, index int, prompt string, jobImages []string, jobImagesErr error) {
+	_ = s.Store.StartImageRun(ctx, job.JobID, index, s.now())
+	logutil.Printf("image started job_id=%s image_index=%d", job.JobID, index)
+	s.publish(notify.Event{Type: "image.started", JobID: job.JobID, Index: index, Status: "running"})
+	if jobImagesErr != nil {
+		s.failImage(job.JobID, index)
+		return
+	}
+	attempts := s.maxAttempts()
+	for attempt := 1; attempt <= attempts; attempt++ {
+		attemptStarted := s.now()
+		if err := s.Store.StartImageAttempt(ctx, job.JobID, index, attempt, attemptStarted); err != nil {
+			if ctx.Err() != nil {
+				s.cancelImage(job.JobID, index)
+				return
+			}
+			s.failImage(job.JobID, index)
+			return
+		}
+		logutil.Printf("image attempt started job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
+		generated, err := s.Generator.Generate(ctx, backend.GenerateRequest{
+			Prompt:     prompt,
+			Images:     jobImages,
+			JobID:      job.JobID,
+			ImageIndex: index,
+			Attempt:    attempt,
+			RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+				elapsedMS := occurredAt.Sub(attemptStarted).Milliseconds()
+				if elapsedMS < 0 {
+					elapsedMS = 0
+				}
+				if err := s.Store.RecordImageAttemptPhase(context.Background(), job.JobID, index, attempt, phase, occurredAt, elapsedMS, tailString(detail, 500)); err != nil {
+					logutil.Warnf("codex phase record failed job_id=%s image_index=%d attempt=%d phase=%s error_len=%d", job.JobID, index, attempt, phase, len(err.Error()))
+					return
+				}
+				logutil.Printf("codex phase job_id=%s image_index=%d attempt=%d phase=%s elapsed_ms=%d", job.JobID, index, attempt, phase, elapsedMS)
+			},
+		})
+		finishedAt := s.now()
+		if err == nil {
+			if ctx.Err() != nil {
+				if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
+					s.cancelImage(job.JobID, index)
+					return
+				}
+				logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
+				s.cancelImage(job.JobID, index)
+				return
+			}
+			if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "done", finishedAt, generated.Path, generated.URI, "", tailString(generated.RawOutput, 2000), ""); err != nil {
+				s.failImage(job.JobID, index)
+				return
+			}
+			logutil.Printf("image attempt succeeded job_id=%s image_index=%d attempt=%d path=%s", job.JobID, index, attempt, generated.Path)
+			if err := s.Store.UpdateImageResult(context.Background(), job.JobID, index, "done", generated.Path, generated.URI); err != nil {
+				if ctx.Err() != nil {
+					s.cancelImage(job.JobID, index)
+					return
+				}
+				s.failImage(job.JobID, index)
+				return
+			}
+			logutil.Printf("image completed job_id=%s image_index=%d path=%s", job.JobID, index, generated.Path)
+			payload, _ := json.Marshal(map[string]any{"status": "done", "path": generated.Path, "uri": generated.URI})
+			s.publish(notify.Event{Type: "image.completed", JobID: job.JobID, Index: index, Status: "done", Path: generated.Path, Payload: payload})
+			return
+		}
+		lastError := tailString(err.Error(), 2000)
+		if ctx.Err() != nil {
+			if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "cancelled", finishedAt, "", "", lastError, "", ""); err != nil {
+				s.cancelImage(job.JobID, index)
+				return
+			}
+			logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, attempt)
+			s.cancelImage(job.JobID, index)
+			return
+		}
+		if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, attempt, "failed", finishedAt, "", "", lastError, "", ""); err != nil {
+			s.failImage(job.JobID, index)
+			return
+		}
+		logutil.Warnf("image attempt failed job_id=%s image_index=%d attempt=%d error_len=%d", job.JobID, index, attempt, len(lastError))
+		if attempt < attempts {
+			delay := s.retryDelay(attempt)
+			logutil.Printf("image retry scheduled job_id=%s image_index=%d next_attempt=%d delay=%s", job.JobID, index, attempt+1, delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				nextAttempt := attempt + 1
+				cancelledAt := s.now()
+				if err := s.Store.StartImageAttempt(context.Background(), job.JobID, index, nextAttempt, cancelledAt); err != nil {
+					s.cancelImage(job.JobID, index)
+					return
+				}
+				if err := s.Store.FinishImageAttempt(context.Background(), job.JobID, index, nextAttempt, "cancelled", cancelledAt, "", "", tailString(ctx.Err().Error(), 2000), "", ""); err != nil {
+					s.cancelImage(job.JobID, index)
+					return
+				}
+				logutil.Printf("image attempt cancelled job_id=%s image_index=%d attempt=%d", job.JobID, index, nextAttempt)
+				s.cancelImage(job.JobID, index)
+				return
+			}
+		}
+	}
+	logutil.Warnf("final image failed job_id=%s image_index=%d attempts=%d", job.JobID, index, attempts)
+	s.failImage(job.JobID, index)
+}
+
+func (s *Service) finishJob(job store.Job) error {
 	latest, images, err := s.Store.GetJob(context.Background(), job.JobID)
 	if err != nil {
 		return err
