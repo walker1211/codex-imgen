@@ -94,15 +94,12 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 	var wg sync.WaitGroup
 	var stdoutErr error
 	var stderrErr error
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		stdoutErr = readLines(stdoutPipe, &stdout, stdoutPhaseRecorder(ctx, req.CodexHome, record, addCleanup))
-	}()
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		stderrErr = readLines(stderrPipe, &stderr, stderrPhaseRecorder(record))
-	}()
+	})
 
 	wg.Wait()
 	waitErr := cmd.Wait()

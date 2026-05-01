@@ -241,9 +241,8 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 	sem := make(chan struct{}, job.EffectiveConcurrency)
 	var wg sync.WaitGroup
 	for i := 1; i <= job.EffectiveCount; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
+		wg.Go(func() {
+			index := i
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -360,7 +359,7 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 			logutil.Warnf("final image failed job_id=%s image_index=%d attempts=%d", job.JobID, index, attempts)
 			logutil.Warnf("image failed job_id=%s image_index=%d", job.JobID, index)
 			s.publish(notify.Event{Type: "image.failed", JobID: job.JobID, Index: index, Status: "failed"})
-		}(i)
+		})
 	}
 	wg.Wait()
 	latest, images, err := s.Store.GetJob(context.Background(), job.JobID)

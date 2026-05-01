@@ -38,9 +38,8 @@ func (e LocalEngine) RunSync(ctx context.Context, req SyncRequest) (result.Resul
 	defer cancel()
 	var wg sync.WaitGroup
 	for i := 0; i < req.Count; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
+		wg.Go(func() {
+			index := i
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -57,7 +56,7 @@ func (e LocalEngine) RunSync(ctx context.Context, req SyncRequest) (result.Resul
 				return
 			}
 			images[index] = result.ImageResult{Index: index + 1, Status: "done", Path: generated.Path, URI: generated.URI}
-		}(i)
+		})
 	}
 	wg.Wait()
 	select {
