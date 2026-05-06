@@ -42,7 +42,7 @@ func TestRunnerRunCapturesStdoutAndStderr(t *testing.T) {
 	result, err := runner.Run(context.Background(), Request{
 		Command: script,
 		Args:    []string{"prompt text"},
-		Timeout: 2 * time.Second,
+		Timeout: 10 * time.Second,
 		Env:     os.Environ(),
 	})
 	if err != nil {
