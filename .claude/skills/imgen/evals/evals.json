@@ -18,6 +18,12 @@
       "prompt": "imgen serve 里有个 job 一直很慢，我有 job-id。请告诉我排查顺序和 sqlite 查询语句。",
       "expected_output": "Ask for the job id if it is missing; otherwise give status/get/list, attempt SQL, phase SQL, logs/out.log, and native codex exec verification in that order.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "我想用 imgen 生成 3 张带中文标题的公众号横向封面候选，标题是『终于敢清理我的 zsh history 了』，并发 2。请给我最小命令，不要真的执行。",
+      "expected_output": "Return a minimal ./imgen command using --count 3 and --concurrency 2. The prompt inside the command should request one horizontal cover candidate or single image, include the title and style constraints, and must not also ask for three images or three different compositions.",
+      "files": []
     }
   ]
 }

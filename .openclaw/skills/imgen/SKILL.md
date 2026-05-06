@@ -54,8 +54,10 @@ Text-to-image:
 Multiple outputs:
 
 ```bash
-./imgen --count 4 --concurrency 2 "五更琉璃，穿着女仆装在咖啡馆"
+./imgen --count 4 --concurrency 2 "生成 1 张五更琉璃穿着女仆装在咖啡馆的图，背景干净，单图"
 ```
+
+For multiple candidates, use `--count N` and `--concurrency M` to control quantity. Keep the prompt phrased as a single-image request; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
 
 Image-to-image:
 

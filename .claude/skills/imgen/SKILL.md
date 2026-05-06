@@ -41,6 +41,8 @@ Do not ask for preferences that are not needed to produce a safe minimal command
 
 Use the shortest command that satisfies the request.
 
+For multiple candidates, use `--count N` and `--concurrency M` to control quantity. Keep the prompt phrased as a single-image request such as `生成 1 张...` or `单图`; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
+
 Common commands:
 
 ```bash
@@ -96,7 +98,7 @@ Prefer one of these outputs:
 Mention these constraints:
 
 - Image references are local file paths.
-- Prompt text should include output count/style constraints explicitly.
+- `--count` / `--concurrency` control output quantity; prompt text should describe one image and its style constraints.
 - Secrets remain outside the calling prompt and stay in `.env`.
 - The caller should not assume public network exposure.
 

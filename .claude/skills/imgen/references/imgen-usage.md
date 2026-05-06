@@ -31,6 +31,8 @@ Use this when the caller wants image paths directly:
 
 Default text mode prints image paths. `--json` prints structured output.
 
+For multi-candidate generation, use `--count` / `--concurrency` for quantity. Keep the prompt phrased as a single-image request, such as `生成 1 张...` or `单图`; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
+
 ## Synchronous image-to-image
 
 Use local file paths with repeated `--image` flags:

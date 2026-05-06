@@ -1,6 +1,6 @@
 # imgen Prompt Patterns
 
-Use these patterns to help users produce stable `imgen` prompts. Keep prompts explicit about subject, style, composition, and output count.
+Use these patterns to help users produce stable `imgen` prompts. Keep prompts explicit about subject, style, composition, and single-image intent.
 
 ## Text-to-image pattern
 
@@ -18,10 +18,10 @@ Example:
 
 ## Multiple output pattern
 
-Use CLI flags for count and concurrency. Keep the prompt focused on one image concept.
+Use CLI flags for count and concurrency. Keep the prompt focused on one image concept and ask for one image only. Do not repeat the requested count inside the prompt.
 
 ```bash
-./imgen --count 4 --concurrency 2 "五更琉璃，穿着女仆装在咖啡馆，背景干净，单图"
+./imgen --count 4 --concurrency 2 "生成 1 张五更琉璃穿着女仆装在咖啡馆的图，背景干净，单图"
 ```
 
 ## Single-reference image-to-image pattern
