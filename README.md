@@ -6,6 +6,8 @@ Local-first Go CLI and async job service for Codex CLI `$imagegen`.
 
 `codex-imgen` turns Codex image generation into a scriptable local workflow: text-to-image, image-to-image with local references, async jobs, status tracking, cancellation, WebSocket events, and local configuration.
 
+`codex-imgen` is an independent community tool and is not affiliated with OpenAI.
+
 If you only need one image once, native `codex exec` is enough. If you need repeatable generation, batching, job tracking, or agent/service integration, use `codex-imgen`.
 
 ## Highlights

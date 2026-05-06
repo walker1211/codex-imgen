@@ -4,6 +4,8 @@
 
 `codex-imgen` 是一个本地优先的 Go CLI 和异步任务服务，用来把 Codex CLI 内置的 `$imagegen` 能力变成可脚本化、可排队、可查询、可集成的图像生成工作流。
 
+`codex-imgen` 是独立社区工具，不隶属于 OpenAI，也不是 OpenAI 官方项目。
+
 ## 为什么用 codex-imgen？
 
 Codex CLI 本身已经有图像生成能力。`codex-imgen` 关注的是它外面的工程化工作流：

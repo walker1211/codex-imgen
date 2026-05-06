@@ -4,6 +4,8 @@
 
 `codex-imgen` is a local-first Go CLI and async job service for Codex CLI `$imagegen`. It turns Codex image generation into a scriptable workflow for text-to-image, image-to-image, batch-style generation, job tracking, and agent/service integration.
 
+`codex-imgen` is an independent community tool and is not affiliated with OpenAI.
+
 ## Why codex-imgen?
 
 Codex CLI already has image generation. `codex-imgen` focuses on the engineering layer around it:
