@@ -34,5 +34,5 @@ func (r HTTPServerRunner) startMaintenance(stop <-chan struct{}) {
 		case <-stop:
 			return
 		}
-		}
+	}
 }

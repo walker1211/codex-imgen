@@ -15,18 +15,23 @@ type wsClientHandler struct {
 	messages chan string
 }
 
-func (h *wsClientHandler) OnOpen(socket *gws.Conn)                           {}
-func (h *wsClientHandler) OnClose(socket *gws.Conn, err error)               {}
-func (h *wsClientHandler) OnPing(socket *gws.Conn, payload []byte)           { _ = socket.WritePong(payload) }
-func (h *wsClientHandler) OnPong(socket *gws.Conn, payload []byte)           {}
-func (h *wsClientHandler) OnMessage(socket *gws.Conn, message *gws.Message)  { defer message.Close(); h.messages <- string(message.Bytes()) }
+func (h *wsClientHandler) OnOpen(socket *gws.Conn)                 {}
+func (h *wsClientHandler) OnClose(socket *gws.Conn, err error)     {}
+func (h *wsClientHandler) OnPing(socket *gws.Conn, payload []byte) { _ = socket.WritePong(payload) }
+func (h *wsClientHandler) OnPong(socket *gws.Conn, payload []byte) {}
+func (h *wsClientHandler) OnMessage(socket *gws.Conn, message *gws.Message) {
+	defer message.Close()
+	h.messages <- string(message.Bytes())
+}
 
 type stubService struct{}
 
-func (stubService) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, error) { return api.CreateJobResult{}, nil }
-func (stubService) GetJob(jobID string) (api.JobStatus, error)                       { return api.JobStatus{}, nil }
-func (stubService) ListJobs(limit int) ([]api.JobSummary, error)                     { return nil, nil }
-func (stubService) CancelJob(jobID string) error                                     { return nil }
+func (stubService) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, error) {
+	return api.CreateJobResult{}, nil
+}
+func (stubService) GetJob(jobID string) (api.JobStatus, error)   { return api.JobStatus{}, nil }
+func (stubService) ListJobs(limit int) ([]api.JobSummary, error) { return nil, nil }
+func (stubService) CancelJob(jobID string) error                 { return nil }
 
 func TestWebSocketHubDeliversPublishedEvent(t *testing.T) {
 	hub := notify.NewWebSocketHub()

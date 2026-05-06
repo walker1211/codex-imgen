@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p .dist/release
+          platforms=(
+            "linux amd64"
+            "linux arm64"
+            "darwin amd64"
+            "darwin arm64"
+            "windows amd64"
+            "windows arm64"
+          )
+
+          for platform in "${platforms[@]}"; do
+            read -r goos goarch <<< "$platform"
+            package="codex-imgen_${GITHUB_REF_NAME}_${goos}_${goarch}"
+            out_dir=".dist/$package"
+            ext=""
+
+            if [ "$goos" = "windows" ]; then
+              ext=".exe"
+            fi
+
+            mkdir -p "$out_dir"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$out_dir/imgen$ext" ./cmd/imgen
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$out_dir/skill-sync$ext" ./cmd/skill-sync
+            tar -czf ".dist/release/$package.tar.gz" -C "$out_dir" "imgen$ext" "skill-sync$ext"
+          done
+
+          cd .dist/release
+          sha256sum *.tar.gz > sha256sums.txt
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" .dist/release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" .dist/release/* --title "$GITHUB_REF_NAME" --notes "Release $GITHUB_REF_NAME" --verify-tag
+          fi
