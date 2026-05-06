@@ -1,6 +1,35 @@
 # codex-imgen
 
-[入口页](./README.md) | [English](./README.en.md)
+[中文](./README.zh-CN.md) | [English](./README.en.md)
+
+`codex-imgen` 是一个本地优先的 Go CLI 和异步任务服务，用来把 Codex CLI 内置的 `$imagegen` 能力变成可脚本化、可排队、可查询、可集成的图像生成工作流。
+
+## 为什么用 codex-imgen？
+
+Codex CLI 本身已经有图像生成能力。`codex-imgen` 关注的是它外面的工程化工作流：
+
+- 用简单的本地 CLI 执行文生图和图生图
+- 通过重复 `--image` 使用本机参考图
+- 用 `submit`、`status`、`get`、`list`、`cancel` 提交和查询异步任务
+- 用 `--count` 和 `--concurrency` 控制候选数量与并发
+- 通过按任务订阅的 WebSocket 事件接入本地工具和 agent
+- 结构化配置放在 `configs/config.yaml`，敏感信息放在 `.env`
+
+如果只需要偶尔生成一张图，直接用原生 `codex exec` 就够了。如果需要可重复生成、批量候选、任务追踪或本地集成，可以使用 `codex-imgen`。
+
+## 能力对比
+
+| 需求 | 原生 `codex exec` | `codex-imgen` |
+|---|---:|---:|
+| 一次性 prompt | 支持 | 支持 |
+| 简洁 CLI 体验 | 有限 | 支持 |
+| 本机参考图 | 手动处理 | 支持 |
+| 候选数量/并发控制 | 手动处理 | 支持 |
+| 异步任务队列 | 不支持 | 支持 |
+| status/list/cancel | 不支持 | 支持 |
+| WebSocket 事件 | 不支持 | 支持 |
+| agent/service 集成 | 手动处理 | 支持 |
+| 本地 YAML 配置 | 不支持 | 支持 |
 
 ## 安装
 

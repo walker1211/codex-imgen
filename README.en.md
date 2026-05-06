@@ -1,6 +1,35 @@
 # codex-imgen
 
-[Landing Page](./README.md) | [中文](./README.zh-CN.md)
+[中文](./README.zh-CN.md) | [English](./README.en.md)
+
+`codex-imgen` is a local-first Go CLI and async job service for Codex CLI `$imagegen`. It turns Codex image generation into a scriptable workflow for text-to-image, image-to-image, batch-style generation, job tracking, and agent/service integration.
+
+## Why codex-imgen?
+
+Codex CLI already has image generation. `codex-imgen` focuses on the engineering layer around it:
+
+- Run text-to-image and image-to-image from a simple local CLI
+- Use local reference images with repeated `--image` flags
+- Submit async jobs and query them later with `status`, `get`, `list`, and `cancel`
+- Control candidate generation with `--count` and `--concurrency`
+- Subscribe to job-scoped WebSocket events from local tools and agents
+- Keep structured settings in `configs/config.yaml` and secrets in `.env`
+
+If you only need one image once, native `codex exec` is enough. If you need repeatable generation, batching, job tracking, or local integration, use `codex-imgen`.
+
+## Comparison
+
+| Need | Native `codex exec` | `codex-imgen` |
+|---|---:|---:|
+| One-off prompt | yes | yes |
+| Simple CLI UX | limited | yes |
+| Local reference images | manual | yes |
+| Batch count/concurrency | manual | yes |
+| Async job queue | no | yes |
+| Status/list/cancel | no | yes |
+| WebSocket events | no | yes |
+| Agent/service integration | manual | yes |
+| Local YAML config | no | yes |
 
 ## Installation
 

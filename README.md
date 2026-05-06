@@ -1,18 +1,26 @@
 # codex-imgen
 
-`imgen` is a Go CLI that calls the native Codex CLI built-in `$imagegen` workflow for text-to-image and image-to-image generation, with an optional local service mode for asynchronous jobs.
+Local-first Go CLI and async job service for Codex CLI `$imagegen`.
 
-[中文文档](./README.zh-CN.md) | [English Documentation](./README.en.md)
+[中文](./README.zh-CN.md) | [English](./README.en.md)
 
-## Features
+`codex-imgen` turns Codex image generation into a scriptable local workflow: text-to-image, image-to-image with local references, async jobs, status tracking, cancellation, WebSocket events, and local configuration.
 
-- Generate images synchronously from a prompt
-- Use local image files as references with repeated `--image` flags
-- Submit and query asynchronous jobs through a local service
-- Query job status, list jobs, cancel jobs, and receive WebSocket events
-- Use a local `configs/config.yaml` file from the current working directory
+If you only need one image once, native `codex exec` is enough. If you need repeatable generation, batching, job tracking, or agent/service integration, use `codex-imgen`.
+
+## Highlights
+
+- Simple synchronous CLI for text-to-image and image-to-image
+- Repeated `--image` flags for local reference images
+- Async local service with `submit`, `status`, `get`, `list`, and `cancel`
+- `--count` and `--concurrency` controls for batch-style workflows
+- Job-scoped WebSocket events for local integrations
+- YAML configuration for structured settings and `.env` for secrets
+- Go-first implementation that builds into local binaries
 
 ## Quick Start
+
+Requires Go and a logged-in Codex CLI.
 
 ```bash
 cp configs/config.example.yaml configs/config.yaml
@@ -21,8 +29,6 @@ cp .example.env .env
 bash ./build.sh
 ./imgen --help
 ```
-
-Fill in `configs/config.yaml` before using service mode, custom backend settings, or email notifications. Put SMTP auth secrets in `.env` only. Run commands from the repository or another working directory containing `configs/config.yaml`.
 
 ## Common Commands
 
