@@ -24,4 +24,4 @@ fi
 "$repo_root/scripts/ci-local.sh" clean
 
 git tag "$version"
-git push origin "$version"
+SKIP_CI_LOCAL_ON_PRE_PUSH=1 git push origin "$version"
