@@ -35,17 +35,38 @@ Codex CLI 本身已经有图像生成能力。`codex-imgen` 关注的是它外�
 
 ## 安装
 
-#### 方式一：从源码构建
+#### 方式一：下载 Release 归档
+
+从 [GitHub Releases](https://github.com/walker1211/codex-imgen/releases) 下载对应 OS/arch 的归档，然后解压：
+
+```bash
+tar -xzf codex-imgen_<tag>_<os>_<arch>.tar.gz
+cd codex-imgen_<tag>_<os>_<arch>
+cp configs/config.example.yaml configs/config.yaml
+# 可选：仅在启用邮件 secret 时需要
+cp .example.env .env
+./imgen --help
+```
+
+Windows 下运行 `imgen.exe --help`。
+
+Release 归档包含 `imgen`、`skill-sync` 二进制，`configs/config.example.yaml`、`.example.env`、README 文件和 `LICENSE`。
+
+#### 方式二：从源码构建
 
 需要 Go 环境，以及已登录可用的 Codex CLI。
 
 ```bash
+git clone https://github.com/walker1211/codex-imgen.git
+cd codex-imgen
 cp configs/config.example.yaml configs/config.yaml
 # 可选：仅在启用邮件 secret 时需要
 cp .example.env .env
 bash ./build.sh
 ./imgen --help
 ```
+
+上面的源码构建命令默认使用类 Unix shell；Windows 下构建出的二进制名为 `imgen.exe` 和 `skill-sync.exe`。
 
 在使用服务模式、自定义 backend 或邮件通知前，请先填写 `configs/config.yaml`。SMTP 授权码等敏感信息只放 `.env`。
 

@@ -22,15 +22,20 @@ If you only need one image once, native `codex exec` is enough. If you need repe
 
 ## Quick Start
 
-Requires Go and a logged-in Codex CLI.
+Download the archive for your OS/arch from [GitHub Releases](https://github.com/walker1211/codex-imgen/releases), then run:
 
 ```bash
+tar -xzf codex-imgen_<tag>_<os>_<arch>.tar.gz
+cd codex-imgen_<tag>_<os>_<arch>
 cp configs/config.example.yaml configs/config.yaml
 # Optional, only needed when email secrets are enabled:
 cp .example.env .env
-bash ./build.sh
 ./imgen --help
 ```
+
+On Windows, run `imgen.exe --help`.
+
+Requires a logged-in Codex CLI. To build from source instead, see [English](./README.en.md#installation) or [中文](./README.zh-CN.md#安装).
 
 ## Common Commands
 

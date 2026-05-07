@@ -5,6 +5,13 @@ mode=${1:-clean}
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
 
+run_secret_scan() {
+  local current_root=$1
+
+  printf '==> secret scan\n'
+  "$repo_root/scripts/secret-scan.sh" --current --current-root "$current_root" --history
+}
+
 run_checks() {
   local dir=$1
 
@@ -30,9 +37,11 @@ case "$mode" in
     tmpdir=$(mktemp -d)
     trap 'rm -rf "$tmpdir"' EXIT
     git -C "$repo_root" ls-files -z | tar -C "$repo_root" --null -T - -cf - | tar -x -C "$tmpdir"
+    run_secret_scan "$tmpdir"
     run_checks "$tmpdir"
     ;;
   worktree)
+    run_secret_scan "$repo_root"
     run_checks "$repo_root"
     ;;
   *)

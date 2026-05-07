@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest an improvement or new capability for codex-imgen
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please avoid including secrets, private prompts, private image data, `.env` values, `configs/config.yaml`, or generated private data.
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Use case
+      description: What are you trying to accomplish? Describe the workflow or problem in practical terms.
+      placeholder: "When using codex-imgen to ..., I need ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-capability
+    attributes:
+      label: Desired capability
+      description: What should codex-imgen be able to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds, existing commands, or other tools have you tried?
+    validations:
+      required: false
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and compatibility
+      description: Mention relevant constraints such as local-only operation, Codex CLI behavior, config compatibility, security, performance, or platform requirements.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add examples, links, or screenshots if helpful. Redact sensitive information.
+    validations:
+      required: false

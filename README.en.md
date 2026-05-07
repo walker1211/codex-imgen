@@ -35,17 +35,38 @@ If you only need one image once, native `codex exec` is enough. If you need repe
 
 ## Installation
 
-#### Option 1: Build from source
+#### Option 1: Download a release archive
+
+Download the archive for your OS/arch from [GitHub Releases](https://github.com/walker1211/codex-imgen/releases), then unpack it:
+
+```bash
+tar -xzf codex-imgen_<tag>_<os>_<arch>.tar.gz
+cd codex-imgen_<tag>_<os>_<arch>
+cp configs/config.example.yaml configs/config.yaml
+# Optional, only needed when email secrets are enabled:
+cp .example.env .env
+./imgen --help
+```
+
+On Windows, run `imgen.exe --help`.
+
+Release archives include the `imgen` and `skill-sync` binaries, `configs/config.example.yaml`, `.example.env`, README files, and `LICENSE`.
+
+#### Option 2: Build from source
 
 Requires Go and a logged-in Codex CLI.
 
 ```bash
+git clone https://github.com/walker1211/codex-imgen.git
+cd codex-imgen
 cp configs/config.example.yaml configs/config.yaml
 # Optional, only needed when email secrets are enabled:
 cp .example.env .env
 bash ./build.sh
 ./imgen --help
 ```
+
+The source-build commands above assume a Unix-like shell. On Windows, built binaries are named `imgen.exe` and `skill-sync.exe`.
 
 Fill in `configs/config.yaml` before using service mode, custom backend settings, or email notifications. Put SMTP auth secrets in `.env` only.
 

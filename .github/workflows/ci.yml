@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run secret scan
+        run: bash ./scripts/secret-scan.sh --current --history
 
       - name: Set up Go
         uses: actions/setup-go@v6

@@ -13,8 +13,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run secret scan
+        run: bash ./scripts/secret-scan.sh --current --history
+
   build:
     runs-on: ubuntu-latest
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +54,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -65,10 +80,12 @@ jobs:
             ext=".exe"
           fi
 
-          mkdir -p "$artifact_dir"
+          mkdir -p "$artifact_dir/configs"
           GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$artifact_dir/imgen$ext" ./cmd/imgen
           GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$artifact_dir/skill-sync$ext" ./cmd/skill-sync
-          tar -czf ".dist/${ARTIFACT_NAME}.tar.gz" -C "$artifact_dir" "imgen$ext" "skill-sync$ext"
+          cp configs/config.example.yaml "$artifact_dir/configs/"
+          cp .example.env README.md README.en.md README.zh-CN.md LICENSE "$artifact_dir/"
+          tar -czf ".dist/${ARTIFACT_NAME}.tar.gz" -C .dist "$ARTIFACT_NAME"
 
       - name: Upload release archive
         uses: actions/upload-artifact@v7
