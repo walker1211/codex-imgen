@@ -38,11 +38,11 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if len(result.Applied) != 2 {
+	if len(result.Applied) != 3 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
 	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "openclaw skill")
+	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "claude skill")
 	if _, err := os.Stat(filepath.Join(paths.ClaudeInstallDir, "stale.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected stale install file to be removed, stat error = %v", err)
 	}
@@ -54,6 +54,24 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	if len(check.Drift) != 0 {
 		t.Fatalf("drift after apply = %v", check.Drift)
 	}
+}
+
+func TestApplySyncsRepositoryOpenClawFromClaudeSource(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	paths := DefaultPaths(repoRoot, home)
+	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "stale openclaw skill")
+
+	result, err := paths.Apply()
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if !containsLine(result.Applied, filepath.Join(repoRoot, ".openclaw", "skills", "imgen")) {
+		t.Fatalf("expected repository openclaw skill to be applied, got %v", result.Applied)
+	}
+	assertFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "claude skill")
 }
 
 func TestCheckReportsChangedTargetFile(t *testing.T) {
@@ -75,6 +93,22 @@ func TestCheckReportsChangedTargetFile(t *testing.T) {
 	}
 }
 
+func TestCheckReportsRepositorySkillMismatch(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	paths := DefaultPaths(repoRoot, home)
+	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "changed openclaw skill")
+
+	result, err := paths.Check()
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !containsLine(result.Drift, "repo openclaw file differs: SKILL.md") {
+		t.Fatalf("expected repo skill drift, got %v", result.Drift)
+	}
+}
+
 func TestCheckReportsRepositoryReferenceMismatch(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
@@ -86,7 +120,7 @@ func TestCheckReportsRepositoryReferenceMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "repo reference differs: references/imgen-usage.md") {
+	if !containsLine(result.Drift, "repo openclaw file differs: references/imgen-usage.md") {
 		t.Fatalf("expected repo reference drift, got %v", result.Drift)
 	}
 }
@@ -104,7 +138,7 @@ func TestCheckReportsMissingRepositoryReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "repo openclaw reference missing: references/imgen-usage.md") {
+	if !containsLine(result.Drift, "repo openclaw file missing: references/imgen-usage.md") {
 		t.Fatalf("expected missing repo reference drift, got %v", result.Drift)
 	}
 }
@@ -120,7 +154,7 @@ func TestCheckReportsExtraRepositoryReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "repo openclaw extra reference: references/extra.md") {
+	if !containsLine(result.Drift, "repo openclaw extra file: references/extra.md") {
 		t.Fatalf("expected extra repo reference drift, got %v", result.Drift)
 	}
 }
@@ -199,11 +233,11 @@ func TestApplyAcceptsExplicitInstallDirOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if len(result.Applied) != 2 {
+	if len(result.Applied) != 3 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
 	assertFile(t, filepath.Join(claudeParent, "imgen", "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(openClawParent, "imgen", "SKILL.md"), "openclaw skill")
+	assertFile(t, filepath.Join(openClawParent, "imgen", "SKILL.md"), "claude skill")
 }
 
 func TestCheckReportsDestinationSymlinkAsDrift(t *testing.T) {
@@ -275,8 +309,9 @@ func createSourceSkills(t *testing.T, repoRoot string) {
 	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "SKILL.md"), "claude skill")
 	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "references", "imgen-usage.md"), "usage")
 	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "evals", "evals.json"), "{}")
-	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "openclaw skill")
+	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "claude skill")
 	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "references", "imgen-usage.md"), "usage")
+	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "evals", "evals.json"), "{}")
 }
 
 func writeFile(t *testing.T, path string, content string) {

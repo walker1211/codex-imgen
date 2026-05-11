@@ -51,7 +51,7 @@ func TestRunApplyCopiesSkills(t *testing.T) {
 		t.Fatalf("exitCode = %d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 	assertFile(t, filepath.Join(home, ".claude", "skills", "imgen", "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(home, ".openclaw", "workspace", "skills", "imgen", "SKILL.md"), "openclaw skill")
+	assertFile(t, filepath.Join(home, ".openclaw", "workspace", "skills", "imgen", "SKILL.md"), "claude skill")
 	if !strings.Contains(stdout.String(), "copied") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}

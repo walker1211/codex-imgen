@@ -41,6 +41,8 @@ Do not ask for preferences that are not needed to produce a safe minimal command
 
 Use the shortest command that satisfies the request.
 
+Before giving local execution instructions for OpenClaw or another agent, do not assume `<repo-root>` is known. Tell the caller to discover a config cwd in this order: `IMGEN_REPO_ROOT`, upward search for `configs/config.yaml` plus `./imgen`/`build.sh`/`go.mod`, explicit user install paths, then `command -v imgen` paired with a discovered config cwd. If no executable or config cwd is found, return a clear "imgen is not installed or not discoverable" error instead of running from an arbitrary cwd.
+
 For multiple candidates, use `--count N` and `--concurrency M` to control quantity. Keep the prompt phrased as a single-image request such as `生成 1 张...` or `单图`; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
 
 Common commands:
@@ -58,12 +60,15 @@ Common commands:
 ./imgen cancel <job-id>
 ```
 
-When showing native Codex CLI verification commands, preserve the `--` separator so repeated `--image` flags do not consume the prompt:
+Prefer `./imgen --json ...` as the stable verification and OpenClaw contract. Native Codex CLI examples are only valid when the available executable supports `exec --json`; preserve the `--` separator so repeated `--image` flags do not consume the prompt:
 
 ```bash
+codex exec --help
 codex exec --json -- '$imagegen 生成一张 Q 版小龙吉祥物，白底，单图'
 codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，改成高质量 3D 手办渲染风格，单图'
 ```
+
+If the local tool is `ccs codex` and `ccs codex exec --json` fails, do not reuse these native examples. Current `imgen` expects `backend.command` to accept `exec --json`; a plain `ccs codex '$imagegen ...'` exit code 0 without image paths is not a successful imgen-compatible result.
 
 ## Safety and configuration rules
 
@@ -73,6 +78,8 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 - Do not assume URL image input is supported; current image input is local file paths only.
 - Do not suggest `0.0.0.0` service binding unless the user explicitly asks for LAN access and understands the exposure.
 - Do not bypass Codex CLI login, permissions, or `$imagegen` availability checks.
+- Do not claim generation succeeded from exit code alone; require text path lines or JSON `images[].path` values.
+- Do not invent the image model; inspect `configs/config.yaml` `backend.model` when available, otherwise say it depends on the configured backend default.
 
 ## Troubleshooting flow
 
@@ -82,7 +89,7 @@ For slow or failed service jobs, follow this order:
 2. Check image attempts in SQLite.
 3. Check phase timings in SQLite.
 4. Check `logs/out.log` when the service was started by repository scripts.
-5. Verify the underlying Codex CLI command directly with `codex exec --json`.
+5. Verify with `./imgen --json`; only verify the underlying Codex command directly when it supports `exec --json`.
 
 Use `references/troubleshooting.md` for exact SQL and phase interpretation.
 
@@ -92,27 +99,29 @@ When the user wants OpenClaw support, produce platform-neutral instructions inst
 
 Prefer one of these outputs:
 
-- A CLI contract that says which `./imgen` command OpenClaw should run, what arguments it should supply, and what output shape to expect.
+- A CLI contract that says how to discover repo/config root, which `./imgen --json` command OpenClaw should run, what arguments it should supply, what output shape to expect, and how to report missing installation/configuration.
 - A local service contract that says to start `./imgen serve`, submit a job, poll or subscribe for completion, then read result paths.
 
 Mention these constraints:
 
 - Image references are local file paths.
 - `--count` / `--concurrency` control output quantity; prompt text should describe one image and its style constraints.
+- Synchronous success means path lines in text mode, or `ok: true` plus non-empty `images[].path` in JSON mode.
+- `submit --json` returns a job id first; final paths come from `get --json <job-id>` after completion.
 - Secrets remain outside the calling prompt and stay in `.env`.
-- The caller should not assume public network exposure.
+- The caller should not assume public network exposure, ccs Codex compatibility, or a known repo-root.
 
 ## Before saying the work is ready
 
-If you edited skill files, verify at minimum:
+If you edited skill files, run from the skill directory and verify at minimum:
 
 ```bash
-python3 -m json.tool .claude/skills/imgen/evals/evals.json >/dev/null
+python3 -m json.tool evals/evals.json >/dev/null
 python3 - <<'PY'
 from pathlib import Path
 markers = ['T' + 'BD', 'TO' + 'DO', 'PLACE' + 'HOLDER']
 problems = []
-for path in Path('.claude/skills/imgen').rglob('*'):
+for path in Path('.').rglob('*'):
     if path.is_file():
         text = path.read_text()
         for marker in markers:

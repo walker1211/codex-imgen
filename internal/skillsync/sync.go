@@ -65,36 +65,46 @@ func (p Paths) WithOpenClawInstallDir(path string) Paths {
 }
 
 func (p Paths) Pairs() []Pair {
+	sourceDir := p.claudeSourceDir()
 	return []Pair{
 		{
 			Name:           "claude",
-			SourceDir:      filepath.Join(p.RepoRoot, ".claude", "skills", "imgen"),
+			SourceDir:      sourceDir,
 			DestinationDir: p.ClaudeInstallDir,
 			InstallParent:  p.claudeParent(),
 		},
 		{
 			Name:           "openclaw",
-			SourceDir:      filepath.Join(p.RepoRoot, ".openclaw", "skills", "imgen"),
+			SourceDir:      sourceDir,
 			DestinationDir: p.OpenClawInstallDir,
 			InstallParent:  p.openClawParent(),
 		},
 	}
 }
 
+func (p Paths) claudeSourceDir() string {
+	return filepath.Join(p.RepoRoot, ".claude", "skills", "imgen")
+}
+
+func (p Paths) openClawRepositoryDir() string {
+	return filepath.Join(p.RepoRoot, ".openclaw", "skills", "imgen")
+}
+
 func (p Paths) Check() (Result, error) {
 	var result Result
+	sourceDir := p.claudeSourceDir()
+	if err := validateSource(sourceDir); err != nil {
+		return Result{}, fmt.Errorf("claude source invalid: %w", err)
+	}
 	pairs := p.Pairs()
 	for _, pair := range pairs {
-		if err := validateSource(pair.SourceDir); err != nil {
-			return Result{}, fmt.Errorf("%s source invalid: %w", pair.Name, err)
-		}
 		drift, err := comparePair(pair)
 		if err != nil {
 			return Result{}, err
 		}
 		result.Drift = append(result.Drift, drift...)
 	}
-	drift, err := compareRepoReferences(pairs[0].SourceDir, pairs[1].SourceDir)
+	drift, err := compareRepositoryMirror(sourceDir, p.openClawRepositoryDir())
 	if err != nil {
 		return Result{}, err
 	}
@@ -105,13 +115,25 @@ func (p Paths) Check() (Result, error) {
 
 func (p Paths) Apply() (Result, error) {
 	var result Result
-	for _, pair := range p.Pairs() {
-		if err := validateSource(pair.SourceDir); err != nil {
-			return Result{}, fmt.Errorf("%s source invalid: %w", pair.Name, err)
-		}
+	sourceDir := p.claudeSourceDir()
+	if err := validateSource(sourceDir); err != nil {
+		return Result{}, fmt.Errorf("claude source invalid: %w", err)
+	}
+	pairs := p.Pairs()
+	for _, pair := range pairs {
 		if err := validateDestination(pair.DestinationDir, pair.InstallParent); err != nil {
 			return Result{}, fmt.Errorf("%s destination invalid: %w", pair.Name, err)
 		}
+	}
+	openClawRepositoryDir := p.openClawRepositoryDir()
+	if err := os.RemoveAll(openClawRepositoryDir); err != nil {
+		return Result{}, fmt.Errorf("remove openclaw repository skill: %w", err)
+	}
+	if err := copyDir(sourceDir, openClawRepositoryDir); err != nil {
+		return Result{}, fmt.Errorf("copy openclaw repository skill: %w", err)
+	}
+	result.Applied = append(result.Applied, openClawRepositoryDir)
+	for _, pair := range pairs {
 		if err := os.RemoveAll(pair.DestinationDir); err != nil {
 			return Result{}, fmt.Errorf("remove %s install: %w", pair.Name, err)
 		}
@@ -140,34 +162,37 @@ func FindRepositoryRoot(cwd string) (string, error) {
 	}
 }
 
-func compareRepoReferences(claudeSourceDir string, openClawSourceDir string) ([]string, error) {
-	claudeReferences, err := listFiles(filepath.Join(claudeSourceDir, "references"))
+func compareRepositoryMirror(sourceDir string, mirrorDir string) ([]string, error) {
+	sourceFiles, err := listFiles(sourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("read claude repository references: %w", err)
+		return nil, fmt.Errorf("read claude repository skill: %w", err)
 	}
-	openClawReferences, err := listFiles(filepath.Join(openClawSourceDir, "references"))
+	mirrorFiles, err := listFiles(mirrorDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return []string{fmt.Sprintf("repo openclaw skill missing: %s", mirrorDir)}, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("read openclaw repository references: %w", err)
+		return nil, fmt.Errorf("read openclaw repository skill: %w", err)
 	}
 
 	var drift []string
-	for rel, claudePath := range claudeReferences {
-		openClawPath, ok := openClawReferences[rel]
+	for rel, sourcePath := range sourceFiles {
+		mirrorPath, ok := mirrorFiles[rel]
 		if !ok {
-			drift = append(drift, fmt.Sprintf("repo openclaw reference missing: references/%s", rel))
+			drift = append(drift, fmt.Sprintf("repo openclaw file missing: %s", rel))
 			continue
 		}
-		same, err := sameFile(claudePath, openClawPath)
+		same, err := sameFile(sourcePath, mirrorPath)
 		if err != nil {
 			return nil, err
 		}
 		if !same {
-			drift = append(drift, fmt.Sprintf("repo reference differs: references/%s", rel))
+			drift = append(drift, fmt.Sprintf("repo openclaw file differs: %s", rel))
 		}
 	}
-	for rel := range openClawReferences {
-		if _, ok := claudeReferences[rel]; !ok {
-			drift = append(drift, fmt.Sprintf("repo openclaw extra reference: references/%s", rel))
+	for rel := range mirrorFiles {
+		if _, ok := sourceFiles[rel]; !ok {
+			drift = append(drift, fmt.Sprintf("repo openclaw extra file: %s", rel))
 		}
 	}
 	sort.Strings(drift)

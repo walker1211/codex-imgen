@@ -180,8 +180,8 @@ email:
 - `scheduler.task_lease_timeout`：运行中任务租约超时时间，用于判断任务是否过期。
 - `scheduler.max_attempts`：每张图片最多生成尝试次数。
 - `backend.type`：生成后端类型；当前使用 `built_in_codex`。
-- `backend.command`：Codex CLI 命令，默认 `codex`。
-- `backend.model`：传给 Codex CLI 的模型名；为空时由 Codex CLI 使用默认模型。
+- `backend.command`：Codex CLI 命令，默认 `codex`；当前内置 backend 要求该命令支持 `exec --json`。
+- `backend.model`：传给 Codex CLI 的模型名；为空时由配置的 Codex backend 使用默认模型。
 - `backend.cwd`：Codex CLI 执行工作目录；为空时使用当前进程工作目录，支持 `~/` 展开。
 - `backend.timeout`：单次 Codex/imagegen 调用超时；生成经常超时时可适当调大。
 - `backend.prompt.prefix`：自动加到提示词前面的前缀，通常保持 `$imagegen`。
@@ -205,7 +205,7 @@ email:
 ./imgen --count 4 --concurrency 2 --json "五更琉璃，穿着女仆装在咖啡馆"
 ```
 
-默认 text 模式会输出图片路径；`--json` 会输出结构化结果。
+默认 text 模式会一行输出一个图片路径；`--json` 会输出结构化结果。自动化调用应以 `ok: true` 且 `images[].path` 非空作为成功标准，不要只看退出码。
 
 ## 同步图生图
 
@@ -226,15 +226,28 @@ email:
 
 - 当前只支持本机文件路径，不支持 URL 或上传文件。
 - 同步 `run` 与异步 `submit` 的 `--image` 参数语义一致。
-- backend 调用 Codex CLI 时会生成 `codex exec --json --image ... -- '<prompt>'`。
+- backend 调用 Codex CLI 时会生成 `<backend.command> exec --json --image ... -- '<prompt>'`。
 - `--` 分隔符对原生 Codex CLI 是必需的，否则 variadic `--image` 会吞掉 prompt。
+- `ccs codex` 等包装命令不一定兼容；如果 `ccs codex exec --json` 报 `unknown option '--json'`，当前内置 backend 不能直接使用它。
 
-直接使用 Codex CLI 验证底层能力：
+直接使用 Codex CLI 验证底层能力时，先确认可执行文件支持 `exec --json`：
 
 ```bash
+codex exec --help
 codex exec --json -- '$imagegen 生成一张 Q 版小龙吉祥物，白底，单图'
 codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，把这张图改成高质量 3D 手办渲染风格，背景更干净，单图'
 ```
+
+## Agent / OpenClaw / Telegram 集成
+
+本项目只负责生成图片并返回本机文件路径；Telegram、OpenClaw 或其他 agent 需要读取 `images[].path` 指向的文件并上传文件本体，不能把本机路径当作图片 URL 或远端 file id。
+
+集成方应遵守这个最小契约：
+
+1. 在调用前定位配置工作目录：优先使用 `IMGEN_REPO_ROOT`；否则从当前目录向上查找包含 `configs/config.yaml` 且包含 `./imgen`、`build.sh` 或 `go.mod` 的目录；再尝试用户明确提供的安装路径。不要扫描整个文件系统。
+2. 从该目录运行 `./imgen --json ...`，或服务模式下运行 `./imgen get --json <job-id>`。
+3. 同步生成成功必须满足 `ok: true` 且期望数量的 `images[].path` 非空；服务任务完成后从 `images[].path` 读取最终文件。
+4. 如果 Telegram 返回类似 `Media failed`，优先在 Telegram/OpenClaw 所在环境检查 `images[].path` 是否存在、可读、格式有效，并确认两边共享同一文件系统或已复制文件。
 
 ## 服务模式
 
@@ -262,6 +275,7 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 ./imgen submit --image ./1.png "保留主体构图和姿态，把这张图改成高质量 3D 手办渲染风格，背景更干净，单图"
 ./imgen status <job-id>
 ./imgen get <job-id>
+./imgen get --json <job-id>
 ./imgen list
 ./imgen cancel <job-id>
 ```
@@ -310,8 +324,8 @@ sqlite3 .data/imgen.db \
 
 ## 输出
 
-- 默认 text 模式输出图片路径。
-- `--json` 输出结构化结果。
+- 默认 text 模式一行输出一个图片路径。
+- `--json` 输出结构化结果，自动化调用应读取 `images[].path`。
 - 多图同步模式下一行一个路径。
 - 服务模式通过 `job_id` 查询状态与图片路径。
 - maintenance ticker 已接入 `serve`，会做最小巡检、失败状态推进和最终失败通知。

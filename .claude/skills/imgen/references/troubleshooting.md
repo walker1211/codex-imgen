@@ -55,16 +55,29 @@ logs/out.log
 
 Look for startup errors, config load errors, backend command failures, scheduler messages, and email notification failures.
 
-## 5. Verify native Codex CLI
+## 5. Verify backend compatibility
 
-Run the closest native command to isolate whether the issue is inside Codex CLI or inside `imgen`:
+First verify through the stable `imgen` contract:
 
 ```bash
+./imgen --json '生成一张 Q 版小龙吉祥物，白底，单图'
+```
+
+Treat the run as successful only when JSON contains `ok: true` and non-empty `images[].path` values. Exit code 0 without image paths is not enough.
+
+Only run native Codex CLI checks when the executable supports `exec --json`:
+
+```bash
+codex exec --help
 codex exec --json -- '$imagegen 生成一张 Q 版小龙吉祥物，白底，单图'
 codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，改成高质量 3D 手办渲染风格，单图'
 ```
 
 Keep the `--` separator before the prompt.
+
+If the local tool is `ccs codex` and `ccs codex exec --json` reports `unknown option '--json'`, do not use it as an `imgen` backend. Current `imgen` calls `<backend.command> exec --json ...`; a wrapper that lacks this interface needs a dedicated adapter before it can be used reliably.
+
+Native output must expose a parseable image path, such as `Saved to: file://...`, or a `thread.started` event that lets `imgen` discover files under `~/.codex/generated_images/<thread_id>`. Otherwise the expected failure is `image path not found in codex output`.
 
 ## 6. Configuration checks
 

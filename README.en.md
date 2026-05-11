@@ -180,8 +180,8 @@ Configuration fields:
 - `scheduler.task_lease_timeout`: running-task lease timeout used to detect expired work.
 - `scheduler.max_attempts`: maximum generation attempts per image.
 - `backend.type`: generation backend type. Currently use `built_in_codex`.
-- `backend.command`: Codex CLI command. Defaults to `codex`.
-- `backend.model`: model name passed to Codex CLI. If empty, Codex CLI chooses its default model.
+- `backend.command`: Codex CLI command. Defaults to `codex`; the built-in backend currently requires this command to support `exec --json`.
+- `backend.model`: model name passed to Codex CLI. If empty, the configured Codex backend chooses its default model.
 - `backend.cwd`: Codex CLI working directory. If empty, the current process working directory is used. `~/` is expanded.
 - `backend.timeout`: timeout for one Codex/imagegen invocation. Increase it if generation frequently times out.
 - `backend.prompt.prefix`: prefix automatically prepended to prompts, usually `$imagegen`.
@@ -205,7 +205,7 @@ Configuration fields:
 ./imgen --count 4 --concurrency 2 --json "Kuroneko wearing a maid outfit in a cafe"
 ```
 
-Text mode prints image paths. `--json` prints structured output.
+Text mode prints one image path per line. `--json` prints structured output. Automation should treat `ok: true` plus non-empty `images[].path` values as success, not exit code alone.
 
 ## Synchronous image-to-image
 
@@ -226,15 +226,28 @@ Notes:
 
 - Only local file paths are supported in this version. URLs and uploads are not supported.
 - Synchronous `run` and asynchronous `submit` use the same `--image` semantics.
-- The backend invokes Codex CLI as `codex exec --json --image ... -- '<prompt>'`.
+- The backend invokes Codex CLI as `<backend.command> exec --json --image ... -- '<prompt>'`.
 - The `--` separator is required for the native Codex CLI command because variadic `--image` would otherwise consume the prompt.
+- Wrappers such as `ccs codex` are not automatically compatible; if `ccs codex exec --json` reports `unknown option '--json'`, the current built-in backend cannot use it directly.
 
-Native Codex CLI examples:
+When verifying native Codex CLI behavior, first confirm that the executable supports `exec --json`:
 
 ```bash
+codex exec --help
 codex exec --json -- '$imagegen Generate a cute baby dragon mascot, white background, single image'
 codex exec --json --image ./1.png -- '$imagegen Keep the subject composition and pose, convert this image to a high-quality 3D figure render style, cleaner background, single image'
 ```
+
+## Agent / OpenClaw / Telegram integration
+
+This project only generates images and returns local file paths. Telegram, OpenClaw, or another agent must read the file pointed to by `images[].path` and upload the file bytes; a local path is not an image URL or a remote file id.
+
+Integrations should follow this minimal contract:
+
+1. Resolve the config working directory before calling the CLI: prefer `IMGEN_REPO_ROOT`; otherwise walk upward from the current directory until finding `configs/config.yaml` plus `./imgen`, `build.sh`, or `go.mod`; then try explicit user-provided install paths. Do not scan the whole filesystem.
+2. Run `./imgen --json ...` from that directory, or use `./imgen get --json <job-id>` in service mode.
+3. Synchronous success requires `ok: true` and non-empty `images[].path` values for the expected images; service jobs expose final files through `images[].path` after completion.
+4. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
 
 ## Service mode
 
@@ -262,6 +275,7 @@ Submit and query from another terminal:
 ./imgen submit --image ./1.png "Keep the subject composition and pose, convert this image to a high-quality 3D figure render style, cleaner background, single image"
 ./imgen status <job-id>
 ./imgen get <job-id>
+./imgen get --json <job-id>
 ./imgen list
 ./imgen cancel <job-id>
 ```
@@ -310,8 +324,8 @@ The WebSocket implementation is intentionally minimal: it supports connection up
 
 ## Output
 
-- Text mode prints image paths.
-- `--json` prints structured output.
+- Text mode prints one image path per line.
+- `--json` prints structured output; automation should read `images[].path`.
 - Multi-image sync mode prints one path per line.
 - Service mode supports querying status and image paths by `job_id`.
 - The maintenance ticker is wired into `serve` for minimal checks, failure progression, and final failure notification.
