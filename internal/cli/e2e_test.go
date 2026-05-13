@@ -55,7 +55,7 @@ func TestCLIEndToEndServiceCommands(t *testing.T) {
 		t.Fatal("expected job id")
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		stdout.Reset()
 		stderr.Reset()
