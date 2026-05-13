@@ -11,6 +11,7 @@ import (
 	"github.com/walker1211/codex-imgen/internal/backend"
 	"github.com/walker1211/codex-imgen/internal/cli"
 	"github.com/walker1211/codex-imgen/internal/config"
+	"github.com/walker1211/codex-imgen/internal/doctor"
 	"github.com/walker1211/codex-imgen/internal/logutil"
 	"github.com/walker1211/codex-imgen/internal/notify"
 	"github.com/walker1211/codex-imgen/internal/scheduler"
@@ -65,6 +66,8 @@ func main() {
 		app.ServerRunner = cli.HTTPServerRunner{Server: server, Maintenance: cli.MaintenanceAdapter{Maintenance: maintenance}, MaintenanceInterval: cfg.Scheduler.MaintenanceInterval}
 	case "submit", "status", "get", "list", "cancel":
 		app.Client = &cli.Client{BaseURL: "http://" + cfg.Server.Listen}
+	case "doctor":
+		app.OpenClawDoctor = doctor.NewOpenClawChecker(home)
 	default:
 		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
 	}

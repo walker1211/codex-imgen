@@ -7,6 +7,7 @@ import (
 	"io"
 
 	api "github.com/walker1211/codex-imgen/internal/api"
+	"github.com/walker1211/codex-imgen/internal/doctor"
 	"github.com/walker1211/codex-imgen/internal/result"
 )
 
@@ -32,12 +33,17 @@ type ServerRunner interface {
 	Run() error
 }
 
+type OpenClawDoctor interface {
+	Check(context.Context) (doctor.Report, error)
+}
+
 type App struct {
-	Stdout       io.Writer
-	Stderr       io.Writer
-	Engine       Engine
-	Client       ClientAPI
-	ServerRunner ServerRunner
+	Stdout         io.Writer
+	Stderr         io.Writer
+	Engine         Engine
+	Client         ClientAPI
+	ServerRunner   ServerRunner
+	OpenClawDoctor OpenClawDoctor
 }
 
 func (a App) writeStdout(value string) error {
@@ -145,6 +151,21 @@ func (a App) Run(ctx context.Context, args []string) int {
 			return a.failWithStderr(err.Error())
 		}
 		if err := a.writeStdoutf("%s\n", cmd.JobID); err != nil {
+			return 1
+		}
+		return 0
+	case "doctor":
+		if a.OpenClawDoctor == nil {
+			return a.failWithStderr("not implemented")
+		}
+		report, err := a.OpenClawDoctor.Check(ctx)
+		if err != nil {
+			return a.failWithStderr(err.Error())
+		}
+		if err := a.writeStdout(report.Render()); err != nil {
+			return 1
+		}
+		if report.Failed() {
 			return 1
 		}
 		return 0

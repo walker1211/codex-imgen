@@ -97,6 +97,16 @@ You can also build first with `bash ./build.sh` and then use the local binary:
 
 The default behavior is drift checking only; local skill install directories are overwritten only when `--apply` is passed explicitly.
 
+## OpenClaw doctor
+
+Check whether the local OpenClaw setup satisfies the imgen / Telegram original-file delivery contract:
+
+```bash
+./imgen doctor openclaw
+```
+
+This command only reads local state. It checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, and the OpenClaw imgen skill installation.
+
 ## Configuration
 
 Repository config layout:

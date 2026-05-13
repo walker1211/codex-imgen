@@ -97,6 +97,16 @@ go run ./cmd/skill-sync --apply
 
 默认只检查漂移；只有显式传入 `--apply` 时才会覆盖本机 skill 安装目录。
 
+## OpenClaw doctor
+
+检查本机 OpenClaw 是否满足 imgen / Telegram 原图发送集成要求：
+
+```bash
+./imgen doctor openclaw
+```
+
+该命令只读检查 `image_generate` deny、main agent 的 `message` 暴露、Telegram direct `NO_REPLY` 静默，以及 OpenClaw imgen skill 安装状态。
+
 ## 配置
 
 仓库内配置布局：

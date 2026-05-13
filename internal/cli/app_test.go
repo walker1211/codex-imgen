@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/walker1211/codex-imgen/internal/api"
+	"github.com/walker1211/codex-imgen/internal/doctor"
 	"github.com/walker1211/codex-imgen/internal/result"
 )
 
@@ -66,6 +67,17 @@ func (s *stubClient) ListJobs(ctx context.Context, limit int) ([]api.JobSummary,
 func (s *stubClient) CancelJob(ctx context.Context, jobID string) error {
 	s.lastCancelledJobID = jobID
 	return s.cancelErr
+}
+
+type stubOpenClawDoctor struct {
+	report doctor.Report
+	err    error
+	called bool
+}
+
+func (s *stubOpenClawDoctor) Check(ctx context.Context) (doctor.Report, error) {
+	s.called = true
+	return s.report, s.err
 }
 
 func TestAppRunPrintsMultiplePaths(t *testing.T) {
@@ -328,5 +340,41 @@ func TestAppRunClientErrorPrintsStderr(t *testing.T) {
 	}
 	if got := stderr.String(); got != "api unavailable\n" {
 		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestAppRunDoctorPrintsReport(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	doctorRunner := &stubOpenClawDoctor{report: doctor.Report{Title: "OpenClaw doctor", Items: []doctor.Item{{Level: doctor.LevelOK, Message: "config file"}}}}
+	app := App{Stdout: stdout, Stderr: stderr, OpenClawDoctor: doctorRunner}
+
+	exitCode := app.Run(context.Background(), []string{"doctor", "openclaw"})
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d stderr=%q", exitCode, stderr.String())
+	}
+	if !doctorRunner.called {
+		t.Fatal("expected doctor to be called")
+	}
+	if got := stdout.String(); got != "OpenClaw doctor\n[OK] config file\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
+func TestAppRunDoctorReturnsFailureWhenReportFails(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	doctorRunner := &stubOpenClawDoctor{report: doctor.Report{Title: "OpenClaw doctor", Items: []doctor.Item{{Level: doctor.LevelFail, Message: "missing message"}}}}
+	app := App{Stdout: stdout, Stderr: stderr, OpenClawDoctor: doctorRunner}
+
+	exitCode := app.Run(context.Background(), []string{"doctor", "openclaw"})
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d", exitCode)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr output, got %q", stderr.String())
+	}
+	if got := stdout.String(); got != "OpenClaw doctor\n[FAIL] missing message\n" {
+		t.Fatalf("stdout = %q", got)
 	}
 }

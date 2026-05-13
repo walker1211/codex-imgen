@@ -53,3 +53,28 @@ func TestParseOptionsSubmitCommandWithImages(t *testing.T) {
 		t.Fatalf("images = %v", cmd.Images)
 	}
 }
+
+func TestParseOptionsDoctorOpenClaw(t *testing.T) {
+	cmd, err := ParseCommand([]string{"doctor", "openclaw"})
+	if err != nil {
+		t.Fatalf("ParseCommand returned error: %v", err)
+	}
+	if cmd.Name != "doctor" {
+		t.Fatalf("name = %q", cmd.Name)
+	}
+	if cmd.DoctorTarget != "openclaw" {
+		t.Fatalf("doctor target = %q", cmd.DoctorTarget)
+	}
+}
+
+func TestParseOptionsDoctorRequiresTarget(t *testing.T) {
+	if _, err := ParseCommand([]string{"doctor"}); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestParseOptionsDoctorRejectsUnknownTarget(t *testing.T) {
+	if _, err := ParseCommand([]string{"doctor", "telegram"}); err == nil {
+		t.Fatal("expected error")
+	}
+}

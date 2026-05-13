@@ -24,6 +24,16 @@ bash ./build.sh
 
 The `.env` file is only needed when email secrets are enabled. The CLI reads `configs/config.yaml` from the current working directory, so a globally installed `imgen` binary is not enough by itself; the caller still needs a config cwd.
 
+## OpenClaw doctor
+
+Use this read-only check to verify the local OpenClaw imgen / Telegram original-file delivery contract:
+
+```bash
+./imgen doctor openclaw
+```
+
+It checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, and the OpenClaw imgen skill installation. WARN lines do not fail the check; FAIL lines do.
+
 ## Finding repo-root or config cwd
 
 Do not assume `<repo-root>` is known. If a user or agent wants to run local commands, discover the working directory in this order:

@@ -19,13 +19,14 @@ func (f *imageFlags) Set(value string) error {
 var ErrHelp = flag.ErrHelp
 
 type Command struct {
-	Name        string
-	Prompt      string
-	Images      []string
-	Count       int
-	Concurrency int
-	JobID       string
-	JSON        bool
+	Name         string
+	Prompt       string
+	Images       []string
+	Count        int
+	Concurrency  int
+	JobID        string
+	DoctorTarget string
+	JSON         bool
 }
 
 func ParseCommand(args []string) (Command, error) {
@@ -41,6 +42,8 @@ func ParseCommand(args []string) (Command, error) {
 		return parseJobCommand(args[0], args[1:])
 	case "list":
 		return Command{Name: "list"}, nil
+	case "doctor":
+		return parseDoctor(args[1:])
 	default:
 		return parseRun(args)
 	}
@@ -108,6 +111,23 @@ func parseJobCommand(name string, args []string) (Command, error) {
 	return cmd, nil
 }
 
+func parseDoctor(args []string) (Command, error) {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	cmd := Command{Name: "doctor"}
+	if err := fs.Parse(args); err != nil {
+		return Command{}, err
+	}
+	if fs.NArg() != 1 {
+		return Command{}, errors.New("expected exactly one doctor target argument")
+	}
+	cmd.DoctorTarget = fs.Arg(0)
+	if cmd.DoctorTarget != "openclaw" {
+		return Command{}, errors.New("unknown doctor target")
+	}
+	return cmd, nil
+}
+
 func UsageText() string {
 	return strings.TrimSpace(`Usage: imgen [flags] "prompt"
        imgen submit [flags] "prompt"
@@ -116,6 +136,7 @@ func UsageText() string {
        imgen get <job-id>
        imgen list
        imgen cancel <job-id>
+       imgen doctor openclaw
 
 Flags:
   --count int          target image count
