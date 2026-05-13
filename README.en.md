@@ -249,6 +249,10 @@ Integrations should follow this minimal contract:
 3. Synchronous success requires `ok: true` and non-empty `images[].path` values for the expected images; service jobs expose final files through `images[].path` after completion.
 4. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
 
+For Telegram multi-image requests that need distinct themes, OpenClaw should run independent `./imgen --json --count 1 --concurrency 1` commands concurrently, send each completed `images[].path` immediately with the `message` tool, use `forceDocument` or `asDocument` for original PNG delivery, and return exactly `NO_REPLY` after direct delivery.
+
+For the full OpenClaw reproduction and configuration checklist, see [OpenClaw imgen Integration](./docs/openclaw-imgen-integration.md).
+
 ## Service mode
 
 Start the local service in the foreground:

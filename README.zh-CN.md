@@ -249,6 +249,10 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 3. 同步生成成功必须满足 `ok: true` 且期望数量的 `images[].path` 非空；服务任务完成后从 `images[].path` 读取最终文件。
 4. 如果 Telegram 返回类似 `Media failed`，优先在 Telegram/OpenClaw 所在环境检查 `images[].path` 是否存在、可读、格式有效，并确认两边共享同一文件系统或已复制文件。
 
+对于需要不同主题的 Telegram 多图请求，OpenClaw 应并发运行多条独立的 `./imgen --json --count 1 --concurrency 1` 命令，每条完成后立刻用 `message` 工具发送对应的 `images[].path`，PNG 原图发送应使用 `forceDocument` 或 `asDocument`，直接发完文件后最终只返回 `NO_REPLY`。
+
+完整 OpenClaw 复刻与配置检查清单见 [OpenClaw imgen Integration](./docs/openclaw-imgen-integration.md)。
+
 ## 服务模式
 
 可以直接前台启动本地服务：

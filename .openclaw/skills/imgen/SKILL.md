@@ -43,6 +43,8 @@ Use the shortest command that satisfies the request.
 
 Before giving local execution instructions for OpenClaw or another agent, do not assume `<repo-root>` is known. Tell the caller to discover a config cwd in this order: `IMGEN_REPO_ROOT`, upward search for `configs/config.yaml` plus `./imgen`/`build.sh`/`go.mod`, explicit user install paths, then `command -v imgen` paired with a discovered config cwd. If no executable or config cwd is found, return a clear "imgen is not installed or not discoverable" error instead of running from an arbitrary cwd.
 
+For OpenClaw or another local agent, resolve a repo/config root before running image requests. Check explicit common checkout paths such as `$HOME/Projects/codex-imgen` and `$HOME/codex-imgen` before falling back to `command -v imgen`; a PATH executable still needs a discovered config cwd. When a checkout root is found, run from that cwd. For text-to-image requests, run `./imgen --json --count N --concurrency 1 "<single-image prompt>"`. For image-to-image requests, add repeated `--image <local-path>` flags before the prompt. For Telegram multi-image requests where distinct themes are useful, launch N independent `./imgen --json --count 1 --concurrency 1 "<single-image prompt>"` commands concurrently when the execution tool supports background sessions, then poll all sessions and deliver each successful `images[].path` immediately as it completes. Do not serialize these independent theme generations unless the tool cannot run them concurrently. Do not wait for all requested images before sending earlier successes. Do not call OpenClaw's built-in `image_generate` tool. Do not fall back to direct `codex exec --json -- '$imagegen ...'`. Do not reuse old generated image paths unless the user explicitly asks for existing files.
+
 For multiple candidates, use `--count N` and `--concurrency M` to control quantity. Keep the prompt phrased as a single-image request such as `生成 1 张...` or `单图`; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
 
 Common commands:
@@ -60,15 +62,9 @@ Common commands:
 ./imgen cancel <job-id>
 ```
 
-Prefer `./imgen --json ...` as the stable verification and OpenClaw contract. Native Codex CLI examples are only valid when the available executable supports `exec --json`; preserve the `--` separator so repeated `--image` flags do not consume the prompt:
+Prefer `./imgen --json ...` as the stable verification and OpenClaw contract. Direct native Codex CLI usage is only a diagnostic path for humans who explicitly ask for it; it is not an OpenClaw fallback. For OpenClaw image requests, do not call `codex exec --json -- '$imagegen ...'` directly; use the discovered repo/config root with `./imgen --json ...` instead.
 
-```bash
-codex exec --help
-codex exec --json -- '$imagegen 生成一张 Q 版小龙吉祥物，白底，单图'
-codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，改成高质量 3D 手办渲染风格，单图'
-```
-
-If the local tool is `ccs codex` and `ccs codex exec --json` fails, do not reuse these native examples. Current `imgen` expects `backend.command` to accept `exec --json`; a plain `ccs codex '$imagegen ...'` exit code 0 without image paths is not a successful imgen-compatible result.
+If the local tool is `ccs codex` and `ccs codex exec --json` fails, do not reuse native Codex commands. Current `imgen` expects `backend.command` to accept `exec --json`; a plain `ccs codex '$imagegen ...'` exit code 0 without image paths is not a successful imgen-compatible result.
 
 ## Safety and configuration rules
 
@@ -107,9 +103,10 @@ Mention these constraints:
 - Image references are local file paths.
 - `--count` / `--concurrency` control output quantity; prompt text should describe one image and its style constraints.
 - Synchronous success means path lines in text mode, or `ok: true` plus non-empty `images[].path` in JSON mode.
+- For Telegram delivery after synchronous CLI success, use the OpenClaw `message` tool when available: use `action="send"` to the current/original chat and attach the generated local file with the exact `path` or `filePath` returned by imgen. For PNG wallpapers or any image where original quality matters, set `forceDocument: true` or `asDocument: true` so Telegram sends the original file instead of compressing it as a photo. A concise caption/status message on the delivered image is acceptable when useful. After direct delivery, reply only `NO_REPLY`; OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` For multi-image requests with distinct themes, start the independent `./imgen --json --count 1 --concurrency 1` commands concurrently, poll them all, and send each completed `images[].path` immediately when that session finishes. If the `message` tool is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for each completed image.
 - `submit --json` returns a job id first; final paths come from `get --json <job-id>` after completion.
 - Secrets remain outside the calling prompt and stay in `.env`.
-- The caller should not assume public network exposure, ccs Codex compatibility, or a known repo-root.
+- For OpenClaw, use the discovered repo/config root, preferring `$HOME/Projects/codex-imgen` or `$HOME/codex-imgen` when present; otherwise the caller should not assume public network exposure, ccs Codex compatibility, or a known repo-root.
 
 ## Before saying the work is ready
 
