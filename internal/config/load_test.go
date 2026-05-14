@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestDefaultPathUsesConfigsDirectory(t *testing.T) {
@@ -33,6 +34,82 @@ func TestLoadMissingDefaultPathReturnsDefaults(t *testing.T) {
 	}
 	if cfg.Server.Listen != Default().Server.Listen {
 		t.Fatalf("listen = %q", cfg.Server.Listen)
+	}
+}
+
+func TestDefaultRealtimeConfig(t *testing.T) {
+	cfg := Default()
+
+	if !cfg.Realtime.Enabled {
+		t.Fatal("expected realtime enabled by default")
+	}
+	if cfg.Realtime.MaxSessions != 4 {
+		t.Fatalf("realtime.max_sessions = %d", cfg.Realtime.MaxSessions)
+	}
+	if cfg.Realtime.MaxItemsPerSession != 8 {
+		t.Fatalf("realtime.max_items_per_session = %d", cfg.Realtime.MaxItemsPerSession)
+	}
+	if cfg.Realtime.MaxConcurrencyPerSession != 4 {
+		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
+	}
+	if cfg.Realtime.GlobalConcurrency != 4 {
+		t.Fatalf("realtime.global_concurrency = %d", cfg.Realtime.GlobalConcurrency)
+	}
+	if cfg.Realtime.MaxCountPerItem != 1 {
+		t.Fatalf("realtime.max_count_per_item = %d", cfg.Realtime.MaxCountPerItem)
+	}
+	if cfg.Realtime.ItemTimeout != 300*time.Second {
+		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
+	}
+	if cfg.Realtime.MaxItemTimeout != 300*time.Second {
+		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
+	}
+}
+
+func TestLoadParsesRealtimeConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`realtime:
+  enabled: false
+  max_sessions: 6
+  max_items_per_session: 9
+  max_concurrency_per_session: 3
+  global_concurrency: 5
+  max_count_per_item: 2
+  item_timeout: 45s
+  max_item_timeout: 2m
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.Realtime.Enabled {
+		t.Fatal("expected realtime disabled")
+	}
+	if cfg.Realtime.MaxSessions != 6 {
+		t.Fatalf("realtime.max_sessions = %d", cfg.Realtime.MaxSessions)
+	}
+	if cfg.Realtime.MaxItemsPerSession != 9 {
+		t.Fatalf("realtime.max_items_per_session = %d", cfg.Realtime.MaxItemsPerSession)
+	}
+	if cfg.Realtime.MaxConcurrencyPerSession != 3 {
+		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
+	}
+	if cfg.Realtime.GlobalConcurrency != 5 {
+		t.Fatalf("realtime.global_concurrency = %d", cfg.Realtime.GlobalConcurrency)
+	}
+	if cfg.Realtime.MaxCountPerItem != 2 {
+		t.Fatalf("realtime.max_count_per_item = %d", cfg.Realtime.MaxCountPerItem)
+	}
+	if cfg.Realtime.ItemTimeout != 45*time.Second {
+		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
+	}
+	if cfg.Realtime.MaxItemTimeout != 2*time.Minute {
+		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
 	}
 }
 
@@ -100,6 +177,15 @@ func TestLoadExampleConfig(t *testing.T) {
 	}
 	if cfg.Scheduler.MaxAttempts != 3 {
 		t.Fatalf("max attempts = %d", cfg.Scheduler.MaxAttempts)
+	}
+	if !cfg.Realtime.Enabled {
+		t.Fatal("expected realtime enabled")
+	}
+	if cfg.Realtime.MaxConcurrencyPerSession != 4 {
+		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
+	}
+	if cfg.Realtime.ItemTimeout != 300*time.Second {
+		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
 	}
 }
 

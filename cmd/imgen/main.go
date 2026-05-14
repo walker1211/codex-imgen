@@ -55,7 +55,22 @@ func main() {
 		defer st.Close()
 		hub := notify.NewWebSocketHub()
 		svc := &service.Service{Store: st, Generator: generator, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
-		handler := api.NewServerWithNotifier(svc, hub)
+		handler := api.NewServerWithOptions(svc, api.ServerOptions{
+			Notifier: hub,
+			Realtime: api.RealtimeOptions{
+				Enabled:                  cfg.Realtime.Enabled,
+				Generator:                generator,
+				PromptPrefix:             cfg.Backend.Prompt.Prefix,
+				PromptPrelude:            cfg.Backend.Prompt.Prelude,
+				DefaultItemTimeout:       cfg.Realtime.ItemTimeout,
+				MaxItemTimeout:           cfg.Realtime.MaxItemTimeout,
+				MaxSessions:              cfg.Realtime.MaxSessions,
+				MaxItemsPerSession:       cfg.Realtime.MaxItemsPerSession,
+				MaxConcurrencyPerSession: cfg.Realtime.MaxConcurrencyPerSession,
+				GlobalConcurrency:        cfg.Realtime.GlobalConcurrency,
+				MaxCountPerItem:          cfg.Realtime.MaxCountPerItem,
+			},
+		})
 		server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadTimeout: cfg.Server.ReadTimeout, WriteTimeout: cfg.Server.WriteTimeout}
 		logutil.Printf("service starting listen=%s data_dir=%s sqlite_path=%s", cfg.Server.Listen, dataDir, dbPath)
 		if err := notify.ValidateEmailConfig(cfg.Email); err != nil {

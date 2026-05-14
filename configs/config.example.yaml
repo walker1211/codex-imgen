@@ -29,6 +29,16 @@ backend:
       输出单张图片。
       默认适合网页或品牌资产场景。
 
+realtime:
+  enabled: true
+  max_sessions: 4
+  max_items_per_session: 8
+  max_concurrency_per_session: 4
+  global_concurrency: 4
+  max_count_per_item: 1
+  item_timeout: 300s
+  max_item_timeout: 300s
+
 email:
   enabled: false
   smtp_host: smtp.example.com

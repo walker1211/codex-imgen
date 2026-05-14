@@ -7,6 +7,7 @@ type Config struct {
 	Storage   StorageConfig   `yaml:"storage"`
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Backend   BackendConfig   `yaml:"backend"`
+	Realtime  RealtimeConfig  `yaml:"realtime"`
 	Email     EmailConfig     `yaml:"email"`
 }
 
@@ -43,6 +44,36 @@ type BackendConfig struct {
 type PromptConfig struct {
 	Prefix  string `yaml:"prefix"`
 	Prelude string `yaml:"prelude"`
+}
+
+type RealtimeConfig struct {
+	Enabled                  bool          `yaml:"enabled"`
+	MaxSessions              int           `yaml:"max_sessions"`
+	MaxItemsPerSession       int           `yaml:"max_items_per_session"`
+	MaxConcurrencyPerSession int           `yaml:"max_concurrency_per_session"`
+	GlobalConcurrency        int           `yaml:"global_concurrency"`
+	MaxCountPerItem          int           `yaml:"max_count_per_item"`
+	ItemTimeout              time.Duration `yaml:"item_timeout"`
+	MaxItemTimeout           time.Duration `yaml:"max_item_timeout"`
+}
+
+func defaultRealtimeConfig() RealtimeConfig {
+	return RealtimeConfig{
+		Enabled:                  true,
+		MaxSessions:              4,
+		MaxItemsPerSession:       8,
+		MaxConcurrencyPerSession: 4,
+		GlobalConcurrency:        4,
+		MaxCountPerItem:          1,
+		ItemTimeout:              300 * time.Second,
+		MaxItemTimeout:           300 * time.Second,
+	}
+}
+
+func (c *RealtimeConfig) UnmarshalYAML(unmarshal func(any) error) error {
+	*c = defaultRealtimeConfig()
+	type raw RealtimeConfig
+	return unmarshal((*raw)(c))
 }
 
 type EmailConfig struct {
@@ -83,6 +114,7 @@ func Default() Config {
 				Prefix: "$imagegen",
 			},
 		},
-		Email: EmailConfig{},
+		Realtime: defaultRealtimeConfig(),
+		Email:    EmailConfig{},
 	}
 }
