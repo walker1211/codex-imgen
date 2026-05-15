@@ -143,12 +143,17 @@ storage:
 
 scheduler:
   global_max_concurrency: 10
-  default_job_concurrency: 2
-  max_job_concurrency: 10
   max_count_per_job: 10
   maintenance_interval: 5m
   task_lease_timeout: 30m
   max_attempts: 3
+
+realtime:
+  enabled: true
+  max_sessions: 4
+  max_items_per_session: 8
+  max_count_per_item: 1
+  item_timeout: 300s
 
 backend:
   type: built_in_codex
@@ -182,13 +187,16 @@ Configuration fields:
 - `server.write_timeout`: HTTP response write timeout.
 - `storage.data_dir`: async service data directory. If empty, the user data directory is used. For local development, `./.data` is a good choice.
 - `storage.sqlite_path`: SQLite database path. If empty, `data_dir/imgen.db` is used. For local development, `./.data/imgen.db` is a good choice.
-- `scheduler.global_max_concurrency`: global concurrency cap reserved for scheduler expansion.
-- `scheduler.default_job_concurrency`: default concurrency for async jobs when `--concurrency` is not provided.
-- `scheduler.max_job_concurrency`: maximum concurrency for one job; larger user input is clamped to this value.
-- `scheduler.max_count_per_job`: maximum image count for one job; larger `--count` input is clamped to this value.
+- `scheduler.global_max_concurrency`: serve-mode bottom generation queue cap shared by async `submit` jobs and WebSocket realtime; it does not affect local sync shorthand generation with `imgen "prompt"`.
+- `scheduler.max_count_per_job`: maximum image count for one async job; larger `--count` input is clamped to this value.
 - `scheduler.maintenance_interval`: service-mode maintenance interval for checks, failure progression, and failure notification.
 - `scheduler.task_lease_timeout`: running-task lease timeout used to detect expired work.
-- `scheduler.max_attempts`: maximum generation attempts per image.
+- `scheduler.max_attempts`: maximum generation attempts per image in async jobs.
+- `realtime.enabled`: whether to enable the WebSocket realtime generation endpoint.
+- `realtime.max_sessions`: maximum active WebSocket generation sessions at the same time.
+- `realtime.max_items_per_session`: maximum items in one WebSocket `generate.start` frame.
+- `realtime.max_count_per_item`: maximum image count per realtime item.
+- `realtime.item_timeout`: timeout for one realtime item; realtime no longer has its own backend global queue.
 - `backend.type`: generation backend type. Currently use `built_in_codex`.
 - `backend.command`: Codex CLI command. Defaults to `codex`; the built-in backend currently requires this command to support `exec --json`.
 - `backend.model`: model name passed to Codex CLI. If empty, the configured Codex backend chooses its default model.

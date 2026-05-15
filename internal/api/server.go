@@ -22,17 +22,15 @@ type ServerOptions struct {
 }
 
 type RealtimeOptions struct {
-	Enabled                  bool
-	Generator                backend.Generator
-	PromptPrefix             string
-	PromptPrelude            string
-	DefaultItemTimeout       time.Duration
-	MaxItemTimeout           time.Duration
-	MaxSessions              int
-	MaxItemsPerSession       int
-	MaxConcurrencyPerSession int
-	GlobalConcurrency        int
-	MaxCountPerItem          int
+	Enabled            bool
+	Generator          backend.Generator
+	PromptPrefix       string
+	PromptPrelude      string
+	DefaultItemTimeout time.Duration
+	MaxItemTimeout     time.Duration
+	MaxSessions        int
+	MaxItemsPerSession int
+	MaxCountPerItem    int
 }
 
 func NewServer(service Service) http.Handler {

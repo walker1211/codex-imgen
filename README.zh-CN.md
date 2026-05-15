@@ -143,12 +143,17 @@ storage:
 
 scheduler:
   global_max_concurrency: 10
-  default_job_concurrency: 2
-  max_job_concurrency: 10
   max_count_per_job: 10
   maintenance_interval: 5m
   task_lease_timeout: 30m
   max_attempts: 3
+
+realtime:
+  enabled: true
+  max_sessions: 4
+  max_items_per_session: 8
+  max_count_per_item: 1
+  item_timeout: 300s
 
 backend:
   type: built_in_codex
@@ -182,13 +187,16 @@ email:
 - `server.write_timeout`：HTTP 写响应超时。
 - `storage.data_dir`：异步服务数据目录；为空时使用用户目录下的默认数据路径。本地开发可设为 `./.data`。
 - `storage.sqlite_path`：SQLite 数据库路径；为空时使用 `data_dir/imgen.db`。本地开发可设为 `./.data/imgen.db`。
-- `scheduler.global_max_concurrency`：全局最大并发数，作为调度扩展上限配置。
-- `scheduler.default_job_concurrency`：异步任务默认并发数；提交任务未指定 `--concurrency` 时使用。
-- `scheduler.max_job_concurrency`：单个任务允许的最大并发数；用户传入更大值会被限制到该上限。
-- `scheduler.max_count_per_job`：单个任务允许生成的最大图片数量；用户传入更大 `--count` 会被限制到该上限。
+- `scheduler.global_max_concurrency`：`imgen serve` 内底层生图队列的总并发上限，`submit` 异步任务和 WebSocket realtime 共用；不影响本地同步简写 `imgen "提示词"`。
+- `scheduler.max_count_per_job`：单个异步任务允许生成的最大图片数量；用户传入更大 `--count` 会被限制到该上限。
 - `scheduler.maintenance_interval`：服务模式维护任务执行间隔，用于巡检、失败状态推进和失败通知。
 - `scheduler.task_lease_timeout`：运行中任务租约超时时间，用于判断任务是否过期。
-- `scheduler.max_attempts`：每张图片最多生成尝试次数。
+- `scheduler.max_attempts`：异步任务每张图片最多生成尝试次数。
+- `realtime.enabled`：是否启用 WebSocket realtime 生图接口。
+- `realtime.max_sessions`：同时最多允许多少个活跃 WebSocket 生图 session。
+- `realtime.max_items_per_session`：单个 WebSocket `generate.start` 最多包含多少个 item。
+- `realtime.max_count_per_item`：单个 realtime item 最多生成多少张图。
+- `realtime.item_timeout`：单个 realtime item 生成超时时间；realtime 不再有独立 backend 全局队列。
 - `backend.type`：生成后端类型；当前使用 `built_in_codex`。
 - `backend.command`：Codex CLI 命令，默认 `codex`；当前内置 backend 要求该命令支持 `exec --json`。
 - `backend.model`：传给 Codex CLI 的模型名；为空时由配置的 Codex backend 使用默认模型。

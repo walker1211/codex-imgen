@@ -135,7 +135,7 @@ Important config fields:
 
 - `server.listen` controls service binding. Use `127.0.0.1:18080` for local-only access.
 - `storage.data_dir` and `storage.sqlite_path` control service data and SQLite paths.
-- `scheduler.default_job_concurrency`, `scheduler.max_job_concurrency`, and `scheduler.max_count_per_job` control job fan-out limits.
+- `scheduler.global_max_concurrency` controls the serve-mode backend generation queue shared by async submit and WebSocket realtime; `scheduler.max_count_per_job` controls the per-job image count cap.
 - `backend.command` defaults to `codex` and must be a single executable that accepts `exec --json`.
 - `backend.model` is passed to Codex CLI when set; when empty, the actual model is whatever the backend executable uses by default.
 - `backend.cwd` is passed to Codex CLI as `--cd` when set.

@@ -793,6 +793,75 @@ func TestServiceRunsQueuedJobToCompletion(t *testing.T) {
 	t.Fatal("job did not complete in time")
 }
 
+func TestServiceQueuesAllJobImagesToInjectedGenerator(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	fake := newBlockingServiceQueueTestGenerator(2)
+	svc := Service{
+		Store:                 s,
+		Generator:             backend.NewQueuedGenerator(fake, 10),
+		PromptPrefix:          "$imagegen",
+		RetryDelays:           []time.Duration{time.Millisecond},
+		MaxAttempts:           1,
+		DefaultJobConcurrency: 1,
+		MaxJobConcurrency:     1,
+		MaxCountPerJob:        2,
+	}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Count: 2, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("CreateJob returned error: %v", err)
+	}
+
+	waitForServiceQueueTestEntry(t, fake.entered)
+	waitForServiceQueueTestEntry(t, fake.entered)
+
+	close(fake.release)
+	waitForJobStatus(t, &svc, created.JobID, "completed")
+}
+
+type blockingServiceQueueTestGenerator struct {
+	entered chan backend.GenerateRequest
+	release chan struct{}
+}
+
+func newBlockingServiceQueueTestGenerator(enteredBuffer int) *blockingServiceQueueTestGenerator {
+	return &blockingServiceQueueTestGenerator{
+		entered: make(chan backend.GenerateRequest, enteredBuffer),
+		release: make(chan struct{}),
+	}
+}
+
+func (g *blockingServiceQueueTestGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	select {
+	case g.entered <- req:
+	case <-ctx.Done():
+		return backend.GenerateResult{}, ctx.Err()
+	}
+	select {
+	case <-g.release:
+		path := fmt.Sprintf("/tmp/service-queue-%d.png", req.ImageIndex)
+		return backend.GenerateResult{Path: path, URI: "file://" + path}, nil
+	case <-ctx.Done():
+		return backend.GenerateResult{}, ctx.Err()
+	}
+}
+
+func waitForServiceQueueTestEntry(t *testing.T, entered <-chan backend.GenerateRequest) backend.GenerateRequest {
+	t.Helper()
+	select {
+	case req := <-entered:
+		return req
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for backend Generate call")
+		return backend.GenerateRequest{}
+	}
+}
+
 func TestServiceCreateJobStoresAbsoluteImagePaths(t *testing.T) {
 	img := filepath.Join(t.TempDir(), "1.png")
 	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {

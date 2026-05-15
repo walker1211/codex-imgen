@@ -240,18 +240,16 @@ func (s *Service) runJob(ctx context.Context, job store.Job) error {
 	s.publish(notify.Event{Type: "job.started", JobID: job.JobID, Status: "running"})
 	prompt := codex.BuildPrompt(s.PromptPrelude, s.PromptPrefix, job.Prompt)
 	jobImages, jobImagesErr := decodeJobImages(job)
-	sem := make(chan struct{}, job.EffectiveConcurrency)
 	var wg sync.WaitGroup
 	for i := 1; i <= job.EffectiveCount; i++ {
 		index := i
 		wg.Go(func() {
 			select {
-			case sem <- struct{}{}:
 			case <-ctx.Done():
 				s.cancelImage(job.JobID, index)
 				return
+			default:
 			}
-			defer func() { <-sem }()
 			s.runJobImage(ctx, job, index, prompt, jobImages, jobImagesErr)
 		})
 	}

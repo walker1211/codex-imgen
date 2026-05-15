@@ -59,14 +59,11 @@ type RealtimeConfig struct {
 
 func defaultRealtimeConfig() RealtimeConfig {
 	return RealtimeConfig{
-		Enabled:                  true,
-		MaxSessions:              4,
-		MaxItemsPerSession:       8,
-		MaxConcurrencyPerSession: 4,
-		GlobalConcurrency:        4,
-		MaxCountPerItem:          1,
-		ItemTimeout:              300 * time.Second,
-		MaxItemTimeout:           300 * time.Second,
+		Enabled:            true,
+		MaxSessions:        4,
+		MaxItemsPerSession: 8,
+		MaxCountPerItem:    1,
+		ItemTimeout:        300 * time.Second,
 	}
 }
 

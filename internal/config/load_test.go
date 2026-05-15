@@ -49,20 +49,11 @@ func TestDefaultRealtimeConfig(t *testing.T) {
 	if cfg.Realtime.MaxItemsPerSession != 8 {
 		t.Fatalf("realtime.max_items_per_session = %d", cfg.Realtime.MaxItemsPerSession)
 	}
-	if cfg.Realtime.MaxConcurrencyPerSession != 4 {
-		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
-	}
-	if cfg.Realtime.GlobalConcurrency != 4 {
-		t.Fatalf("realtime.global_concurrency = %d", cfg.Realtime.GlobalConcurrency)
-	}
 	if cfg.Realtime.MaxCountPerItem != 1 {
 		t.Fatalf("realtime.max_count_per_item = %d", cfg.Realtime.MaxCountPerItem)
 	}
 	if cfg.Realtime.ItemTimeout != 300*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
-	}
-	if cfg.Realtime.MaxItemTimeout != 300*time.Second {
-		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
 	}
 }
 
@@ -72,11 +63,8 @@ func TestLoadParsesRealtimeConfig(t *testing.T) {
   enabled: false
   max_sessions: 6
   max_items_per_session: 9
-  max_concurrency_per_session: 3
-  global_concurrency: 5
   max_count_per_item: 2
   item_timeout: 45s
-  max_item_timeout: 2m
 `)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
@@ -96,20 +84,40 @@ func TestLoadParsesRealtimeConfig(t *testing.T) {
 	if cfg.Realtime.MaxItemsPerSession != 9 {
 		t.Fatalf("realtime.max_items_per_session = %d", cfg.Realtime.MaxItemsPerSession)
 	}
-	if cfg.Realtime.MaxConcurrencyPerSession != 3 {
-		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
-	}
-	if cfg.Realtime.GlobalConcurrency != 5 {
-		t.Fatalf("realtime.global_concurrency = %d", cfg.Realtime.GlobalConcurrency)
-	}
 	if cfg.Realtime.MaxCountPerItem != 2 {
 		t.Fatalf("realtime.max_count_per_item = %d", cfg.Realtime.MaxCountPerItem)
 	}
 	if cfg.Realtime.ItemTimeout != 45*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
 	}
-	if cfg.Realtime.MaxItemTimeout != 2*time.Minute {
-		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
+}
+
+func TestLoadAcceptsDeprecatedSchedulerConcurrencyFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`scheduler:
+  default_job_concurrency: 2
+  max_job_concurrency: 10
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+}
+
+func TestLoadAcceptsDeprecatedRealtimeConcurrencyFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`realtime:
+  max_concurrency_per_session: 3
+  global_concurrency: 5
+  max_item_timeout: 2m
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load returned error: %v", err)
 	}
 }
 
@@ -181,8 +189,11 @@ func TestLoadExampleConfig(t *testing.T) {
 	if !cfg.Realtime.Enabled {
 		t.Fatal("expected realtime enabled")
 	}
-	if cfg.Realtime.MaxConcurrencyPerSession != 4 {
-		t.Fatalf("realtime.max_concurrency_per_session = %d", cfg.Realtime.MaxConcurrencyPerSession)
+	if cfg.Scheduler.GlobalMaxConcurrency != 10 {
+		t.Fatalf("scheduler.global_max_concurrency = %d", cfg.Scheduler.GlobalMaxConcurrency)
+	}
+	if cfg.Realtime.MaxSessions != 4 {
+		t.Fatalf("realtime.max_sessions = %d", cfg.Realtime.MaxSessions)
 	}
 	if cfg.Realtime.ItemTimeout != 300*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
@@ -195,7 +206,6 @@ func TestLoadParsesServiceConfig(t *testing.T) {
   listen: 127.0.0.1:18080
 scheduler:
   global_max_concurrency: 10
-  default_job_concurrency: 2
 backend:
   type: built_in_codex
   command: codex

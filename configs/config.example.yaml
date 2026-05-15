@@ -8,13 +8,11 @@ storage:
   sqlite_path: ""
 
 scheduler:
-  global_max_concurrency: 10
-  default_job_concurrency: 2
-  max_job_concurrency: 10
-  max_count_per_job: 10
-  maintenance_interval: 5m
-  task_lease_timeout: 30m
-  max_attempts: 3
+  global_max_concurrency: 10 # serve 内底层生图队列的总并发上限；submit async 和 WebSocket realtime 共用
+  max_count_per_job: 10 # submit async 单个 job 最多生成多少张图
+  maintenance_interval: 5m # 后台维护任务执行间隔
+  task_lease_timeout: 30m # 后台任务租约超时时间
+  max_attempts: 3 # submit async 单张图片失败后的最大重试次数
 
 backend:
   type: built_in_codex
@@ -30,14 +28,11 @@ backend:
       默认适合网页或品牌资产场景。
 
 realtime:
-  enabled: true
-  max_sessions: 4
-  max_items_per_session: 8
-  max_concurrency_per_session: 4
-  global_concurrency: 4
-  max_count_per_item: 1
-  item_timeout: 300s
-  max_item_timeout: 300s
+  enabled: true # 是否启用 WebSocket realtime 生图接口
+  max_sessions: 4 # 同时最多允许多少个活跃 WebSocket 生图 session
+  max_items_per_session: 8 # 单个 WebSocket generate.start 最多包含多少个 item
+  max_count_per_item: 1 # 单个 realtime item 最多生成多少张图
+  item_timeout: 300s # 单个 realtime item 生成超时时间
 
 email:
   enabled: false

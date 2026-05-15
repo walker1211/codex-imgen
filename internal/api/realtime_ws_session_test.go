@@ -225,7 +225,7 @@ func TestRealtimeWebSocketUsesBackendDirectlyAndStreamsImagesImmediately(t *test
 
 func TestRealtimeWebSocketEmitsSpecJSONKeys(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("spec prompt")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 1, DefaultItemTimeout: time.Second}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Second}})
 	conn, rawEvents, cleanup := dialRealtimeWebSocketRaw(t, server)
 	defer cleanup()
 
@@ -273,13 +273,12 @@ func TestRealtimeWebSocketRejectsTimeoutAboveConfiguredMaxWithoutGenerating(t *t
 func TestRealtimeWebSocketUsesMaxItemTimeoutWhenRequestAndDefaultTimeoutOmitted(t *testing.T) {
 	generator := &deadlineCheckingRealtimeGenerator{deadlineRemaining: make(chan time.Duration, 1)}
 	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{
-		Enabled:                  true,
-		Generator:                generator,
-		DefaultItemTimeout:       0,
-		MaxItemTimeout:           50 * time.Millisecond,
-		MaxItemsPerSession:       8,
-		MaxCountPerItem:          1,
-		MaxConcurrencyPerSession: 1,
+		Enabled:            true,
+		Generator:          generator,
+		DefaultItemTimeout: 0,
+		MaxItemTimeout:     50 * time.Millisecond,
+		MaxItemsPerSession: 8,
+		MaxCountPerItem:    1,
 	}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
@@ -312,13 +311,12 @@ func TestRealtimeWebSocketUsesMaxItemTimeoutWhenRequestAndDefaultTimeoutOmitted(
 func TestRealtimeWebSocketClampsDefaultItemTimeoutToConfiguredMax(t *testing.T) {
 	generator := &deadlineCheckingRealtimeGenerator{deadlineRemaining: make(chan time.Duration, 1)}
 	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{
-		Enabled:                  true,
-		Generator:                generator,
-		DefaultItemTimeout:       250 * time.Millisecond,
-		MaxItemTimeout:           50 * time.Millisecond,
-		MaxItemsPerSession:       8,
-		MaxCountPerItem:          1,
-		MaxConcurrencyPerSession: 1,
+		Enabled:            true,
+		Generator:          generator,
+		DefaultItemTimeout: 250 * time.Millisecond,
+		MaxItemTimeout:     50 * time.Millisecond,
+		MaxItemsPerSession: 8,
+		MaxCountPerItem:    1,
 	}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
@@ -361,7 +359,7 @@ func TestRealtimeHandlerCancelsSessionRegisteredAfterClose(t *testing.T) {
 
 func TestRealtimeWebSocketRejectsEmptyItemsWithoutGenerating(t *testing.T) {
 	generator := newBlockingRealtimeGenerator()
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 2, MaxCountPerItem: 1, MaxConcurrencyPerSession: 2}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 2, MaxCountPerItem: 1}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 
@@ -381,7 +379,7 @@ func TestRealtimeWebSocketRejectsEmptyItemsWithoutGenerating(t *testing.T) {
 
 func TestRealtimeWebSocketRejectsTooManyItemsWithoutGenerating(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("one", "two", "three")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 2, MaxCountPerItem: 1, MaxConcurrencyPerSession: 2}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 2, MaxCountPerItem: 1}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 
@@ -405,7 +403,7 @@ func TestRealtimeWebSocketRejectsTooManyItemsWithoutGenerating(t *testing.T) {
 
 func TestRealtimeWebSocketRejectsTooHighCountWithoutGenerating(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("too-many")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 2}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 
@@ -423,15 +421,15 @@ func TestRealtimeWebSocketRejectsTooHighCountWithoutGenerating(t *testing.T) {
 	assertNoGeneratorStart(t, generator.started)
 }
 
-func TestRealtimeWebSocketClampsMaxConcurrencyToConfiguredLimit(t *testing.T) {
+func TestRealtimeWebSocketQueuesAllItemsToInjectedGenerator(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("first", "second")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 1, DefaultItemTimeout: time.Second}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: backend.NewQueuedGenerator(generator, 10), MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Second}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 
 	writeRealtimeStart(t, conn, RealtimeStartRequest{
 		Type:           "generate.start",
-		MaxConcurrency: 2,
+		MaxConcurrency: 1,
 		TimeoutMS:      1000,
 		Items: []RealtimeItem{
 			{ID: "first", Prompt: "first", Count: 1},
@@ -441,32 +439,19 @@ func TestRealtimeWebSocketClampsMaxConcurrencyToConfiguredLimit(t *testing.T) {
 
 	event := readRealtimeEvent(t, events)
 	assertEventType(t, event, "session.started")
-	if event.MaxConcurrency != 1 {
-		t.Fatalf("session.started MaxConcurrency = %d, want 1", event.MaxConcurrency)
+	if event.MaxConcurrency != 2 {
+		t.Fatalf("session.started MaxConcurrency = %d, want 2", event.MaxConcurrency)
 	}
-	firstStarted := readRealtimeEvent(t, events)
-	assertEventType(t, firstStarted, "item.started")
-	select {
-	case prompt := <-generator.started:
-		if prompt != "first" {
-			t.Fatalf("first generator start = %q, want first", prompt)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for first generator start")
-	}
-	assertNoGeneratorStart(t, generator.started)
+	assertItemStartedIndexes(t, []RealtimeEvent{readRealtimeEvent(t, events), readRealtimeEvent(t, events)}, map[string]int{"first": 0, "second": 1})
+	assertGeneratorStartedSet(t, generator.started, "first", "second")
+
 	generator.release("first", backend.GenerateResult{Path: "/tmp/first.png", URI: "file:///tmp/first.png"}, nil)
-	for {
-		event := readRealtimeEvent(t, events)
-		if event.Type == "item.started" && event.ItemID == "second" {
-			break
-		}
-	}
+	generator.release("second", backend.GenerateResult{Path: "/tmp/second.png", URI: "file:///tmp/second.png"}, nil)
 }
 
 func TestRealtimeWebSocketCancelsBlockedGeneratorsAfterClientDisconnect(t *testing.T) {
 	generator := newCancellableRealtimeGenerator()
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 2, DefaultItemTimeout: time.Minute}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Minute}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 
@@ -499,7 +484,7 @@ func TestRealtimeWebSocketCancelsBlockedGeneratorsAfterClientDisconnect(t *testi
 
 func TestRealtimeWebSocketRejectsSessionAboveConfiguredGlobalLimit(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("first", "second")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxSessions: 1, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 1, DefaultItemTimeout: time.Minute}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxSessions: 1, MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Minute}})
 	firstConn, firstEvents, firstCleanup := dialRealtimeWebSocket(t, server)
 	defer firstCleanup()
 	secondConn, secondEvents, secondCleanup := dialRealtimeWebSocket(t, server)
@@ -537,9 +522,9 @@ func TestRealtimeWebSocketRejectsSessionAboveConfiguredGlobalLimit(t *testing.T)
 	assertNoGeneratorStart(t, generator.started)
 }
 
-func TestRealtimeWebSocketLimitsGlobalBackendConcurrencyAcrossSessions(t *testing.T) {
+func TestRealtimeWebSocketUsesInjectedGeneratorQueueAcrossSessions(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("first", "second")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxSessions: 2, GlobalConcurrency: 1, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 2, DefaultItemTimeout: time.Minute}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: backend.NewQueuedGenerator(generator, 1), MaxSessions: 2, MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Minute}})
 	firstConn, firstEvents, firstCleanup := dialRealtimeWebSocket(t, server)
 	defer firstCleanup()
 	secondConn, secondEvents, secondCleanup := dialRealtimeWebSocket(t, server)
@@ -583,7 +568,7 @@ func TestRealtimeWebSocketLimitsGlobalBackendConcurrencyAcrossSessions(t *testin
 
 func TestRealtimeWebSocketRejectsSecondStartWhileSessionActive(t *testing.T) {
 	generator := newBlockingRealtimeGenerator("first", "second")
-	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, MaxConcurrencyPerSession: 1, DefaultItemTimeout: time.Minute}})
+	server := NewServerWithOptions(stubService{}, ServerOptions{Realtime: RealtimeOptions{Enabled: true, Generator: generator, MaxItemsPerSession: 8, MaxCountPerItem: 1, DefaultItemTimeout: time.Minute}})
 	conn, events, cleanup := dialRealtimeWebSocket(t, server)
 	defer cleanup()
 

@@ -19,12 +19,10 @@ import (
 )
 
 const (
-	defaultRealtimeMaxSessions              = 4
-	defaultRealtimeMaxItemsPerSession       = 8
-	defaultRealtimeMaxConcurrencyPerSession = 4
-	defaultRealtimeGlobalConcurrency        = 4
-	defaultRealtimeMaxCountPerItem          = 1
-	defaultRealtimeMaxItemTimeout           = 5 * time.Minute
+	defaultRealtimeMaxSessions        = 4
+	defaultRealtimeMaxItemsPerSession = 8
+	defaultRealtimeMaxCountPerItem    = 1
+	defaultRealtimeMaxItemTimeout     = 5 * time.Minute
 )
 
 var realtimeSessionCounter atomic.Uint64
@@ -43,7 +41,6 @@ type realtimeWSHandler struct {
 
 type realtimeSharedState struct {
 	sessions chan struct{}
-	global   chan struct{}
 }
 
 type realtimeWorkerEvent struct {
@@ -95,7 +92,7 @@ func (h *realtimeWSHandler) runSession(socket *gws.Conn, req RealtimeStartReques
 		_ = h.writeRealtimeEvent(socket, RealtimeEvent{Type: "session.failed", SessionID: sessionID, ClientRequestID: req.ClientRequestID, Error: err.Error(), Retryable: false})
 		return
 	}
-	maxConcurrency := realtimeMaxConcurrency(req, limits)
+	maxConcurrency := len(req.Items)
 	ctx, cancel := context.WithCancel(context.Background())
 	h.setCancel(token, cancel)
 	defer cancel()
@@ -116,20 +113,18 @@ func (h *realtimeWSHandler) runSession(socket *gws.Conn, req RealtimeStartReques
 
 	events := make(chan realtimeWorkerEvent, len(req.Items)*2+1)
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, maxConcurrency)
 	go func() {
 		for itemIndex, item := range req.Items {
 			select {
-			case sem <- struct{}{}:
 			case <-ctx.Done():
 				wg.Wait()
 				close(events)
 				return
+			default:
 			}
 			itemIndex := itemIndex
 			item := item
 			wg.Go(func() {
-				defer func() { <-sem }()
 				h.runItem(ctx, req, limits, sessionID, itemIndex, item, events)
 			})
 		}
@@ -174,9 +169,6 @@ func (h *realtimeWSHandler) runItem(ctx context.Context, req RealtimeStartReques
 		count = 1
 	}
 	for index := range count {
-		if !h.state.acquireGlobal(ctx) {
-			return
-		}
 		generateCtx, cancel := h.itemContext(ctx, req, limits)
 		result, err := h.options.Generator.Generate(generateCtx, backend.GenerateRequest{
 			Prompt:     codex.BuildPrompt(h.options.PromptPrelude, h.options.PromptPrefix, item.Prompt),
@@ -184,7 +176,6 @@ func (h *realtimeWSHandler) runItem(ctx context.Context, req RealtimeStartReques
 			ImageIndex: index,
 		})
 		cancel()
-		h.state.releaseGlobal()
 		if err != nil {
 			sendRealtimeWorkerEvent(ctx, events, realtimeWorkerEvent{event: RealtimeEvent{Type: "item.failed", SessionID: sessionID, ItemID: item.ID, Index: itemIndex, Error: realtimeItemFailureMessage(err), Retryable: true}, complete: true})
 			return
@@ -270,9 +261,6 @@ func (h *realtimeWSHandler) realtimeLimits() RealtimeOptions {
 	if limits.MaxItemsPerSession <= 0 {
 		limits.MaxItemsPerSession = defaultRealtimeMaxItemsPerSession
 	}
-	if limits.MaxConcurrencyPerSession <= 0 {
-		limits.MaxConcurrencyPerSession = defaultRealtimeMaxConcurrencyPerSession
-	}
 	if limits.MaxCountPerItem <= 0 {
 		limits.MaxCountPerItem = defaultRealtimeMaxCountPerItem
 	}
@@ -304,36 +292,12 @@ func validateRealtimeRequest(req RealtimeStartRequest, limits RealtimeOptions) e
 	return nil
 }
 
-func realtimeMaxConcurrency(req RealtimeStartRequest, limits RealtimeOptions) int {
-	maxConcurrency := req.MaxConcurrency
-	if maxConcurrency <= 0 {
-		maxConcurrency = 1
-	}
-	if maxConcurrency > limits.MaxConcurrencyPerSession {
-		maxConcurrency = limits.MaxConcurrencyPerSession
-	}
-	if len(req.Items) > 0 && maxConcurrency > len(req.Items) {
-		maxConcurrency = len(req.Items)
-	}
-	if maxConcurrency <= 0 {
-		maxConcurrency = 1
-	}
-	return maxConcurrency
-}
-
 func newRealtimeSharedState(options RealtimeOptions) *realtimeSharedState {
 	maxSessions := options.MaxSessions
 	if maxSessions <= 0 {
 		maxSessions = defaultRealtimeMaxSessions
 	}
-	globalConcurrency := options.GlobalConcurrency
-	if globalConcurrency <= 0 {
-		globalConcurrency = defaultRealtimeGlobalConcurrency
-	}
-	return &realtimeSharedState{
-		sessions: make(chan struct{}, maxSessions),
-		global:   make(chan struct{}, globalConcurrency),
-	}
+	return &realtimeSharedState{sessions: make(chan struct{}, maxSessions)}
 }
 
 func (s *realtimeSharedState) acquireSession() bool {
@@ -354,28 +318,6 @@ func (s *realtimeSharedState) releaseSession() {
 	}
 	select {
 	case <-s.sessions:
-	default:
-	}
-}
-
-func (s *realtimeSharedState) acquireGlobal(ctx context.Context) bool {
-	if s == nil {
-		return true
-	}
-	select {
-	case s.global <- struct{}{}:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
-
-func (s *realtimeSharedState) releaseGlobal() {
-	if s == nil {
-		return
-	}
-	select {
-	case <-s.global:
 	default:
 	}
 }
