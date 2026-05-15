@@ -4,7 +4,7 @@ This reference is platform-neutral. OpenClaw or another local agent can use it t
 
 ## What imgen does
 
-`imgen` is a Go CLI for Codex CLI's built-in `$imagegen` workflow. It supports synchronous image generation and a local asynchronous service mode.
+`imgen` is a Go CLI for Codex CLI's built-in `$imagegen` workflow. It supports synchronous image generation, local asynchronous service jobs, and realtime WebSocket generation when `imgen serve` is running.
 
 ## Required local setup
 
@@ -53,7 +53,7 @@ When an agent uses shell or exec tools, prefer setting `cwd` to the discovered r
 
 ## Synchronous text-to-image
 
-Use this when the caller wants image paths directly:
+Use this default path when the caller wants image paths directly. Normal one-shot OpenClaw image generation should use this path and does not require `./imgen serve`:
 
 ```bash
 ./imgen "生成一张 3D 风格的小龙吉祥物，适合网页 hero 区域，背景干净，单图"
@@ -91,6 +91,8 @@ Native Codex output is successful only when it exposes an image path that `imgen
 
 ## Service mode
 
+Use service mode only when the caller needs server-side job management, polling, cancellation, recovery, job-scoped notifications, or realtime WebSocket streaming. It is not required for normal synchronous CLI generation.
+
 Start the local service in the foreground:
 
 ```bash
@@ -121,6 +123,24 @@ Submit and inspect jobs:
 `submit --json` returns a job id and status, not final image paths. Poll `get --json <job-id>` until the job is complete, then read final paths from `images[].path`.
 
 The service also exposes `/ws?job_id=<job-id>` for job-scoped WebSocket events.
+
+## Realtime WebSocket generation
+
+Use `/v1/realtime/generate/ws` only when the caller can keep a WebSocket session open and needs live per-item events instead of a job id. This mode requires `./imgen serve`, calls the backend directly through the serve-mode shared generation queue, and does not create submit jobs or write job store rows.
+
+A client sends one `generate.start` frame containing `client_request_id`, `items`, optional `max_concurrency`, and optional `timeout_ms`. Treat `max_concurrency` as a protocol compatibility field; backend generation concurrency is controlled by `scheduler.global_max_concurrency` in serve mode.
+
+Expected event flow:
+
+```text
+session.started
+item.started
+image.completed
+item.failed
+session.completed or session.failed
+```
+
+Read generated local file paths from `image.completed` events. For job management, polling, cancellation, or recovery, use submit/service jobs instead of realtime WebSocket.
 
 ## Configuration boundaries
 
@@ -153,7 +173,7 @@ If `configs/config.yaml` is unavailable, do not invent a model. Say the model de
 
 ## OpenClaw calling contract
 
-OpenClaw should first resolve a config cwd using the discovery rules above. In a normal local checkout, `$HOME/Projects/codex-imgen` maps to the user's repo while avoiding a hardcoded username path. If the resolved root contains an `imgen` executable and `configs/config.yaml`, use this route:
+OpenClaw should first resolve a config cwd using the discovery rules above. In a normal local checkout, `$HOME/Projects/codex-imgen` maps to the user's repo while avoiding a hardcoded username path. For normal image generation, default to the synchronous CLI route below; do not require `./imgen serve` unless the user needs service job management or realtime streaming. If the resolved root contains an `imgen` executable and `configs/config.yaml`, use this route:
 
 ```bash
 cd <repo-root> && ./imgen --json --count <N> --concurrency 1 "<single-image prompt>"
@@ -195,7 +215,7 @@ Treat the call as successful only when `ok` is true and the expected completed i
 
 If an execution tool cannot set `cwd`, use `cd <repo-root> && ./imgen ...` as the shell command.
 
-For service usage, OpenClaw should:
+For service job usage, OpenClaw should use this only when it needs job management, polling, cancellation, or recovery:
 
 1. Ensure `./imgen serve` is running locally from the discovered repo/config root.
 2. Submit with `./imgen submit --json` or the local API exposed by the service.
@@ -203,6 +223,16 @@ For service usage, OpenClaw should:
 4. Poll `./imgen get --json <job-id>` or subscribe to `/ws?job_id=<job-id>`.
 5. Read final image paths from `images[].path` after completion.
 
+For realtime WebSocket usage, OpenClaw should use this only when it needs live streaming events:
+
+1. Ensure `./imgen serve` is running locally from the discovered repo/config root.
+2. Connect to `/v1/realtime/generate/ws`.
+3. Send one `generate.start` frame with one or more items.
+4. Stream status from `session.started`, `item.started`, `image.completed`, `item.failed`, and terminal session events.
+5. Send each generated file path from `image.completed` as soon as it is available.
+
+Realtime WebSocket does not return a job id, does not use `get <job-id>`, and does not create submit job store rows.
+
 For Telegram delivery after synchronous CLI success, use the OpenClaw `message` tool when available: send the exact generated local file path with `path` or `filePath`, set `forceDocument: true` or `asDocument: true` for PNG wallpapers/original-quality delivery, use concise captions/status text when useful, then reply only `NO_REPLY`. OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` For multi-image requests with distinct themes, run the one-image `imgen` commands concurrently when possible and send each completed image as soon as its session returns `images[].path`. If direct message-tool delivery is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for each completed image.
 
-OpenClaw should not assume URL image input, public network binding, public filesystem scans, ccs Codex compatibility, direct native Codex CLI fallback, async heartbeat delivery for final images, or access to secrets inside prompts.
+OpenClaw should not assume URL image input, public network binding, public filesystem scans, ccs Codex compatibility, direct native Codex CLI fallback, `imgen serve` for normal one-shot generation, async heartbeat delivery for final images, or access to secrets inside prompts.

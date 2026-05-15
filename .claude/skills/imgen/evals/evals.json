@@ -28,7 +28,7 @@
     {
       "id": 5,
       "prompt": "OpenClaw 当前 cwd 和 ~/.openclaw 都没有 ./imgen，也没找到 codex-imgen 仓库。请给它一份健壮的 repo-root 发现和失败提示，不要假设 <repo-root> 已知。",
-      "expected_output": "Provide an ordered repo-root discovery contract using IMGEN_REPO_ROOT, command -v imgen, common local checkout paths, and upward search for configs/config.yaml plus imgen/build.sh/go.mod. Include a clear 'imgen not installed' error and do not tell OpenClaw to run ./imgen from an unknown cwd.",
+      "expected_output": "Provide an ordered repo-root discovery contract using IMGEN_REPO_ROOT, upward search for configs/config.yaml plus imgen/build.sh/go.mod, explicit or common local checkout paths, and command -v imgen only when paired with a discovered config cwd. Include a clear 'imgen not installed' error and do not tell OpenClaw to run ./imgen from an unknown cwd.",
       "files": []
     },
     {
@@ -47,6 +47,18 @@
       "id": 8,
       "prompt": "请告诉我 imgen 实际用什么模型生图。如果本地没有 repo/config，应该怎么回答和怎么确认？",
       "expected_output": "Say the model is determined by configs/config.yaml backend.model when present, otherwise by the Codex backend default; provide commands or file locations to inspect backend.model and backend.command; do not invent a model when repo/config is unavailable.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "OpenClaw 只是要给当前 Telegram 聊天生成一张 PNG 壁纸并发回原图。它是不是要先启动 imgen serve？请给调用和回复规则。",
+      "expected_output": "State that normal one-shot OpenClaw image generation should default to synchronous ./imgen --json from the discovered repo/config root and does not require imgen serve. Require success to include ok true and images[].path, then send the exact local file with the OpenClaw message tool using forceDocument/asDocument for original PNG quality, and reply only NO_REPLY after direct delivery. Do not suggest image_generate, direct codex exec fallback, or reusing old paths.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "什么时候 OpenClaw 才应该用 imgen submit 或 WebSocket realtime，而不是直接 ./imgen --json？",
+      "expected_output": "Explain that ./imgen --json synchronous CLI is the default for direct image paths. Use submit/service only when the caller needs server-side job management, polling, cancellation, or recovery. Use /v1/realtime/generate/ws only when imgen serve is running and the caller needs live streaming events for a WebSocket session; realtime should not create submit jobs or store rows. Mention that submit and realtime share scheduler.global_max_concurrency inside serve, while sync CLI does not.",
       "files": []
     }
   ]

@@ -5,18 +5,19 @@ description: Use this skill whenever the user wants to use codex-imgen, imgen, C
 
 # imgen
 
-Use this skill to help users operate the `codex-imgen` project through its `imgen` CLI and local service mode.
+Use this skill to help users operate the `codex-imgen` project through its synchronous `imgen` CLI, local service jobs, and realtime WebSocket mode.
 
 ## First decide the scenario
 
 Classify the user's request into one of these scenarios:
 
-1. **Synchronous text-to-image** — user has a prompt and wants image paths immediately.
-2. **Synchronous image-to-image** — user supplies one or more local reference image paths.
-3. **Asynchronous service job** — user wants `serve`, `submit`, `status`, `get`, `list`, or `cancel`.
-4. **Troubleshooting** — user reports slowness, failed jobs, retries, missing images, or confusing output.
-5. **Configuration** — user asks about `configs/config.yaml`, `.env`, backend, scheduler, storage, or email settings.
-6. **OpenClaw or another agent** — user wants platform-neutral instructions for another agent or tool to call imgen.
+1. **Synchronous text-to-image** — user has a prompt and wants image paths directly.
+2. **Synchronous image-to-image** — user supplies one or more local reference image paths and wants image paths directly.
+3. **Asynchronous service job** — user wants `serve`, `submit`, `status`, `get`, `list`, `cancel`, polling, recovery, or server-side job management.
+4. **Realtime WebSocket** — user explicitly wants streaming per-item generation events over `/v1/realtime/generate/ws`.
+5. **Troubleshooting** — user reports slowness, failed jobs, retries, missing images, or confusing output.
+6. **Configuration** — user asks about `configs/config.yaml`, `.env`, backend, scheduler, storage, or email settings.
+7. **OpenClaw or another agent** — user wants platform-neutral instructions for another agent or tool to call imgen.
 
 Read only the reference file that matches the scenario:
 
@@ -33,17 +34,17 @@ Ask one question when a required value is missing:
 - Missing image prompt for generation.
 - Missing local image path for image-to-image.
 - Missing job id for `status`, `get`, `cancel`, or job-specific troubleshooting.
-- Missing decision between synchronous CLI and service mode when the user's goal requires choosing one.
+- Missing decision between synchronous CLI, service job, or realtime WebSocket only when the user's goal requires choosing one.
 
 Do not ask for preferences that are not needed to produce a safe minimal command.
 
 ## Command rules
 
-Use the shortest command that satisfies the request.
+Use the shortest command that satisfies the request. Default one-shot generation, including normal OpenClaw image generation, to synchronous `./imgen --json ...`; do not require `./imgen serve` unless the user needs job management or realtime streaming.
 
 Before giving local execution instructions for OpenClaw or another agent, do not assume `<repo-root>` is known. Tell the caller to discover a config cwd in this order: `IMGEN_REPO_ROOT`, upward search for `configs/config.yaml` plus `./imgen`/`build.sh`/`go.mod`, explicit user install paths, then `command -v imgen` paired with a discovered config cwd. If no executable or config cwd is found, return a clear "imgen is not installed or not discoverable" error instead of running from an arbitrary cwd.
 
-For OpenClaw or another local agent, resolve a repo/config root before running image requests. Check explicit common checkout paths such as `$HOME/Projects/codex-imgen` and `$HOME/codex-imgen` before falling back to `command -v imgen`; a PATH executable still needs a discovered config cwd. When a checkout root is found, run from that cwd. For text-to-image requests, run `./imgen --json --count N --concurrency 1 "<single-image prompt>"`. For image-to-image requests, add repeated `--image <local-path>` flags before the prompt. For Telegram multi-image requests where distinct themes are useful, launch N independent `./imgen --json --count 1 --concurrency 1 "<single-image prompt>"` commands concurrently when the execution tool supports background sessions, then poll all sessions and deliver each successful `images[].path` immediately as it completes. Do not serialize these independent theme generations unless the tool cannot run them concurrently. Do not wait for all requested images before sending earlier successes. Do not call OpenClaw's built-in `image_generate` tool. Do not fall back to direct `codex exec --json -- '$imagegen ...'`. Do not reuse old generated image paths unless the user explicitly asks for existing files.
+For OpenClaw or another local agent, resolve a repo/config root before running image requests. Check explicit common checkout paths such as `$HOME/Projects/codex-imgen` and `$HOME/codex-imgen` before falling back to `command -v imgen`; a PATH executable still needs a discovered config cwd. When a checkout root is found, run from that cwd. For normal text-to-image requests, use the synchronous CLI and run `./imgen --json --count N --concurrency 1 "<single-image prompt>"`; this does not require `./imgen serve`. For image-to-image requests, add repeated `--image <local-path>` flags before the prompt. Use `submit` only when the caller needs server-side job management, polling, cancellation, or recovery. Use `/v1/realtime/generate/ws` only when `imgen serve` is running and the caller needs live streaming events for a WebSocket session. For Telegram multi-image requests where distinct themes are useful, launch N independent `./imgen --json --count 1 --concurrency 1 "<single-image prompt>"` commands concurrently when the execution tool supports background sessions, then poll all sessions and deliver each successful `images[].path` immediately as it completes. Do not serialize these independent theme generations unless the tool cannot run them concurrently. Do not wait for all requested images before sending earlier successes. Do not call OpenClaw's built-in `image_generate` tool. Do not fall back to direct `codex exec --json -- '$imagegen ...'`. Do not reuse old generated image paths unless the user explicitly asks for existing files.
 
 For multiple candidates, use `--count N` and `--concurrency M` to control quantity. Keep the prompt phrased as a single-image request such as `生成 1 张...` or `单图`; do not also ask for `生成 N 张` or `输出 N 张不同构图` inside the prompt.
 
@@ -95,8 +96,9 @@ When the user wants OpenClaw support, produce platform-neutral instructions inst
 
 Prefer one of these outputs:
 
-- A CLI contract that says how to discover repo/config root, which `./imgen --json` command OpenClaw should run, what arguments it should supply, what output shape to expect, and how to report missing installation/configuration.
-- A local service contract that says to start `./imgen serve`, submit a job, poll or subscribe for completion, then read result paths.
+- A synchronous CLI contract for normal image generation. It should say how to discover repo/config root, which `./imgen --json` command OpenClaw should run, what arguments it should supply, what output shape to expect, and how to report missing installation/configuration. This is the default OpenClaw contract and does not require `./imgen serve`.
+- A local service job contract only when the caller needs server-side job management, polling, cancellation, or recovery. It should say to start `./imgen serve`, submit a job, poll or subscribe for completion, then read result paths.
+- A realtime WebSocket contract only when the caller needs live streaming events. It should say to start `./imgen serve`, connect to `/v1/realtime/generate/ws`, send one `generate.start` frame, consume streamed events, and read image paths from `image.completed` events.
 
 Mention these constraints:
 
@@ -104,9 +106,10 @@ Mention these constraints:
 - `--count` / `--concurrency` control output quantity; prompt text should describe one image and its style constraints.
 - Synchronous success means path lines in text mode, or `ok: true` plus non-empty `images[].path` in JSON mode.
 - For Telegram delivery after synchronous CLI success, use the OpenClaw `message` tool when available: use `action="send"` to the current/original chat and attach the generated local file with the exact `path` or `filePath` returned by imgen. For PNG wallpapers or any image where original quality matters, set `forceDocument: true` or `asDocument: true` so Telegram sends the original file instead of compressing it as a photo. A concise caption/status message on the delivered image is acceptable when useful. After direct delivery, reply only `NO_REPLY`; OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` For multi-image requests with distinct themes, start the independent `./imgen --json --count 1 --concurrency 1` commands concurrently, poll them all, and send each completed `images[].path` immediately when that session finishes. If the `message` tool is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for each completed image.
-- `submit --json` returns a job id first; final paths come from `get --json <job-id>` after completion.
+- `submit --json` returns a job id first; final paths come from `get --json <job-id>` after completion. Use it only for service-job workflows, not normal one-shot OpenClaw generation.
+- Realtime WebSocket requires `imgen serve`, streams `session.started`, `item.started`, `image.completed`, `item.failed`, and terminal session events, and does not create submit jobs or store rows.
 - Secrets remain outside the calling prompt and stay in `.env`.
-- For OpenClaw, use the discovered repo/config root, preferring `$HOME/Projects/codex-imgen` or `$HOME/codex-imgen` when present; otherwise the caller should not assume public network exposure, ccs Codex compatibility, or a known repo-root.
+- For OpenClaw, use the discovered repo/config root, preferring `$HOME/Projects/codex-imgen` or `$HOME/codex-imgen` when present; otherwise the caller should not assume public network exposure, ccs Codex compatibility, `imgen serve` for normal one-shot generation, or a known repo-root.
 
 ## Before saying the work is ready
 
