@@ -55,6 +55,9 @@ func TestDefaultRealtimeConfig(t *testing.T) {
 	if cfg.Realtime.ItemTimeout != 300*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
 	}
+	if cfg.Realtime.MaxItemTimeout != 300*time.Second {
+		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
+	}
 }
 
 func TestLoadParsesRealtimeConfig(t *testing.T) {
@@ -65,6 +68,7 @@ func TestLoadParsesRealtimeConfig(t *testing.T) {
   max_items_per_session: 9
   max_count_per_item: 2
   item_timeout: 45s
+  max_item_timeout: 90s
 `)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
@@ -90,9 +94,12 @@ func TestLoadParsesRealtimeConfig(t *testing.T) {
 	if cfg.Realtime.ItemTimeout != 45*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
 	}
+	if cfg.Realtime.MaxItemTimeout != 90*time.Second {
+		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
+	}
 }
 
-func TestLoadAcceptsDeprecatedSchedulerConcurrencyFields(t *testing.T) {
+func TestLoadParsesSchedulerJobConcurrencyFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`scheduler:
   default_job_concurrency: 2
@@ -101,23 +108,29 @@ func TestLoadAcceptsDeprecatedSchedulerConcurrencyFields(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := Load(path); err != nil {
+	cfg, err := Load(path)
+	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Scheduler.DefaultJobConcurrency != 2 {
+		t.Fatalf("scheduler.default_job_concurrency = %d", cfg.Scheduler.DefaultJobConcurrency)
+	}
+	if cfg.Scheduler.MaxJobConcurrency != 10 {
+		t.Fatalf("scheduler.max_job_concurrency = %d", cfg.Scheduler.MaxJobConcurrency)
 	}
 }
 
-func TestLoadAcceptsDeprecatedRealtimeConcurrencyFields(t *testing.T) {
+func TestLoadRejectsDeprecatedRealtimeConcurrencyFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`realtime:
   max_concurrency_per_session: 3
   global_concurrency: 5
-  max_item_timeout: 2m
 `)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := Load(path); err != nil {
-		t.Fatalf("Load returned error: %v", err)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected deprecated realtime concurrency fields to be rejected")
 	}
 }
 
@@ -197,6 +210,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	}
 	if cfg.Realtime.ItemTimeout != 300*time.Second {
 		t.Fatalf("realtime.item_timeout = %s", cfg.Realtime.ItemTimeout)
+	}
+	if cfg.Realtime.MaxItemTimeout != 300*time.Second {
+		t.Fatalf("realtime.max_item_timeout = %s", cfg.Realtime.MaxItemTimeout)
 	}
 }
 

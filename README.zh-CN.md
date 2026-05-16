@@ -133,51 +133,54 @@ cp .example.env .env
 
 ```yaml
 server:
-  listen: 127.0.0.1:18080
-  read_timeout: 5s
-  write_timeout: 30s
+  listen: 127.0.0.1:18080 # 服务监听地址；默认仅允许本机访问
+  read_timeout: 5s # HTTP 读取请求超时
+  write_timeout: 30s # HTTP 写响应超时
 
 storage:
-  data_dir: ""
-  sqlite_path: ""
+  data_dir: "" # 服务数据目录；为空时使用系统用户数据目录
+  sqlite_path: "" # SQLite 数据库路径；为空时使用 data_dir/imgen.db
 
 scheduler:
-  global_max_concurrency: 10
-  max_count_per_job: 10
-  maintenance_interval: 5m
-  task_lease_timeout: 30m
-  max_attempts: 3
-
-realtime:
-  enabled: true
-  max_sessions: 4
-  max_items_per_session: 8
-  max_count_per_item: 1
-  item_timeout: 300s
+  global_max_concurrency: 10 # serve 内底层生图队列总并发；submit async 和 WebSocket realtime 共用
+  default_job_concurrency: 2 # submit async 单个 job 默认同时生成几张图
+  max_job_concurrency: 10 # submit async 单个 job 允许的最大生成并发
+  max_count_per_job: 10 # submit async 单个 job 最多生成多少张图
+  maintenance_interval: 5m # 后台维护任务执行间隔
+  task_lease_timeout: 30m # 后台任务租约超时时间
+  max_attempts: 3 # submit async 单张图片失败后的最大重试次数
 
 backend:
-  type: built_in_codex
-  command: codex
-  model: gpt-5.4
-  cwd: ""
-  timeout: 90s
+  type: built_in_codex # 使用本机 Codex CLI 调用内置 $imagegen
+  command: codex # Codex CLI 命令名或可执行文件路径
+  model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
+  cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
+  timeout: 90s # 单次 Codex/imagegen 调用超时时间
   prompt:
-    prefix: "$imagegen"
-    prelude: |
+    prefix: "$imagegen" # 自动加到 prompt 前面的前缀
+    prelude: | # 固定提示词说明，用于统一默认风格和输出约束
       使用内置 imagegen 技能。
       输出单张图片。
       默认适合网页或品牌资产场景。
 
+realtime:
+  enabled: true # 是否启用 WebSocket realtime 生图接口
+  max_sessions: 4 # 同时最多允许多少个活跃 WebSocket 生图 session
+  max_items_per_session: 8 # 单个 WebSocket generate.start 最多包含多少个 item
+  max_count_per_item: 1 # 单个 realtime item 最多生成多少张图
+  item_timeout: 300s # 单个 realtime item 默认生成超时
+  max_item_timeout: 300s # 客户端 timeout_ms 允许的最大值；通常与 item_timeout 保持一致
+
 email:
-  enabled: false
-  smtp_host: smtp.example.com
-  smtp_port: 465
-  from: from@example.com
-  to: to@example.com
-  timeout: 3s
-  retry_times: 3
-  retry_wait_time: 500ms
-  use_proxy: false
+  enabled: false # 是否启用维护失败邮件通知
+  smtp_host: smtp.example.com # SMTP 服务器地址
+  smtp_port: 465 # SMTP 端口；465 使用隐式 TLS
+  from: from@example.com # 发件人邮箱，也是 SMTP 登录账号
+  to: to@example.com # 收件人邮箱
+  timeout: 3s # 单次 SMTP 连接和发送超时
+  retry_times: 3 # 邮件发送最大尝试次数
+  retry_wait_time: 500ms # 邮件发送失败后的重试间隔
+  use_proxy: false # SMTP 发送暂不支持代理；保持 false
 ```
 
 参数说明：
@@ -188,6 +191,8 @@ email:
 - `storage.data_dir`：异步服务数据目录；为空时使用用户目录下的默认数据路径。本地开发可设为 `./.data`。
 - `storage.sqlite_path`：SQLite 数据库路径；为空时使用 `data_dir/imgen.db`。本地开发可设为 `./.data/imgen.db`。
 - `scheduler.global_max_concurrency`：`imgen serve` 内底层生图队列的总并发上限，`submit` 异步任务和 WebSocket realtime 共用；不影响本地同步简写 `imgen "提示词"`。
+- `scheduler.default_job_concurrency`：异步 `submit` job 没显式传 `--concurrency` 时的默认并发。
+- `scheduler.max_job_concurrency`：异步 `submit` job 允许的最大并发。
 - `scheduler.max_count_per_job`：单个异步任务允许生成的最大图片数量；用户传入更大 `--count` 会被限制到该上限。
 - `scheduler.maintenance_interval`：服务模式维护任务执行间隔，用于巡检、失败状态推进和失败通知。
 - `scheduler.task_lease_timeout`：运行中任务租约超时时间，用于判断任务是否过期。
@@ -196,7 +201,8 @@ email:
 - `realtime.max_sessions`：同时最多允许多少个活跃 WebSocket 生图 session。
 - `realtime.max_items_per_session`：单个 WebSocket `generate.start` 最多包含多少个 item。
 - `realtime.max_count_per_item`：单个 realtime item 最多生成多少张图。
-- `realtime.item_timeout`：单个 realtime item 生成超时时间；realtime 不再有独立 backend 全局队列。
+- `realtime.item_timeout`：单个 realtime item 默认生成超时；realtime 不再有独立 backend 全局队列。
+- `realtime.max_item_timeout`：客户端 `timeout_ms` 允许的最大值；通常与 `item_timeout` 保持一致即可。
 - `backend.type`：生成后端类型；当前使用 `built_in_codex`。
 - `backend.command`：Codex CLI 命令，默认 `codex`；当前内置 backend 要求该命令支持 `exec --json`。
 - `backend.model`：传给 Codex CLI 的模型名；为空时由配置的 Codex backend 使用默认模型。
@@ -269,7 +275,16 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 
 对于需要不同主题的 Telegram 多图请求，OpenClaw 应并发运行多条独立的 `./imgen --json --count 1 --concurrency 1` 命令，每条完成后立刻用 `message` 工具发送对应的 `images[].path`，PNG 原图发送应使用 `forceDocument` 或 `asDocument`，直接发完文件后最终只返回 `NO_REPLY`。
 
-完整 OpenClaw 复刻与配置检查清单见 [OpenClaw imgen Integration](./docs/openclaw-imgen-integration.md)。
+### OpenClaw + Telegram 快速接入
+
+1. 运行 `./skill-sync --apply` 同步 imgen skill，然后重启 OpenClaw。
+2. 运行 `./imgen doctor openclaw`，确认 `message send supports --force-document` 为 OK，且没有 FAIL。
+3. 在 Telegram 里发一条测试消息，例如：`请生成 3 张不同氛围的猫咪 Mac 壁纸`。
+4. 期望收到 3 个图片文件/文档；可以有简短说明和 caption，但不应该看到字面量 `NO_REPLY`。
+
+`NO_REPLY` 是给 OpenClaw 的静默结束信号：图片已经直接发到 Telegram 后，agent 不再追加一条最终文字回复。
+
+完整 OpenClaw 复刻与配置检查清单见 [OpenClaw imgen 集成](./docs/openclaw-imgen-integration.zh-CN.md)。
 
 ## 服务模式
 

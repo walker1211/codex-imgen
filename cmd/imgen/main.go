@@ -58,16 +58,7 @@ func main() {
 		svc := &service.Service{Store: st, Generator: serveGen, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
 		handler := api.NewServerWithOptions(svc, api.ServerOptions{
 			Notifier: hub,
-			Realtime: api.RealtimeOptions{
-				Enabled:            cfg.Realtime.Enabled,
-				Generator:          serveGen,
-				PromptPrefix:       cfg.Backend.Prompt.Prefix,
-				PromptPrelude:      cfg.Backend.Prompt.Prelude,
-				DefaultItemTimeout: cfg.Realtime.ItemTimeout,
-				MaxSessions:        cfg.Realtime.MaxSessions,
-				MaxItemsPerSession: cfg.Realtime.MaxItemsPerSession,
-				MaxCountPerItem:    cfg.Realtime.MaxCountPerItem,
-			},
+			Realtime: realtimeOptions(serveGen, cfg),
 		})
 		server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadTimeout: cfg.Server.ReadTimeout, WriteTimeout: cfg.Server.WriteTimeout}
 		logutil.Printf("service starting listen=%s data_dir=%s sqlite_path=%s", cfg.Server.Listen, dataDir, dbPath)
@@ -90,6 +81,20 @@ func main() {
 
 func serveGenerator(generator backend.Generator, cfg config.Config) backend.Generator {
 	return backend.NewQueuedGenerator(generator, cfg.Scheduler.GlobalMaxConcurrency)
+}
+
+func realtimeOptions(generator backend.Generator, cfg config.Config) api.RealtimeOptions {
+	return api.RealtimeOptions{
+		Enabled:            cfg.Realtime.Enabled,
+		Generator:          generator,
+		PromptPrefix:       cfg.Backend.Prompt.Prefix,
+		PromptPrelude:      cfg.Backend.Prompt.Prelude,
+		DefaultItemTimeout: cfg.Realtime.ItemTimeout,
+		MaxItemTimeout:     cfg.Realtime.MaxItemTimeout,
+		MaxSessions:        cfg.Realtime.MaxSessions,
+		MaxItemsPerSession: cfg.Realtime.MaxItemsPerSession,
+		MaxCountPerItem:    cfg.Realtime.MaxCountPerItem,
+	}
 }
 
 func storagePaths(home string, cfg config.Config) (string, string) {

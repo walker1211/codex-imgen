@@ -1,5 +1,7 @@
 # OpenClaw imgen Integration
 
+[中文](./openclaw-imgen-integration.zh-CN.md)
+
 This guide documents the repository-supported contract for using `codex-imgen` from OpenClaw, especially for Telegram image delivery.
 
 `codex-imgen` generates local image files and returns local paths. OpenClaw or another agent is responsible for reading those files and uploading the file bytes to Telegram or another channel.

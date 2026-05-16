@@ -1,28 +1,30 @@
 server:
-  listen: 127.0.0.1:18080
-  read_timeout: 5s
-  write_timeout: 30s
+  listen: 127.0.0.1:18080 # 服务监听地址；默认仅允许本机访问
+  read_timeout: 5s # HTTP 读取请求超时
+  write_timeout: 30s # HTTP 写响应超时
 
 storage:
-  data_dir: ""
-  sqlite_path: ""
+  data_dir: "" # 服务数据目录；为空时使用系统用户数据目录
+  sqlite_path: "" # SQLite 数据库路径；为空时使用 data_dir/imgen.db
 
 scheduler:
-  global_max_concurrency: 10 # serve 内底层生图队列的总并发上限；submit async 和 WebSocket realtime 共用
+  global_max_concurrency: 10 # serve 内底层生图队列总并发；submit async 和 WebSocket realtime 共用
+  default_job_concurrency: 2 # submit async 单个 job 默认同时生成几张图
+  max_job_concurrency: 10 # submit async 单个 job 允许的最大生成并发
   max_count_per_job: 10 # submit async 单个 job 最多生成多少张图
   maintenance_interval: 5m # 后台维护任务执行间隔
   task_lease_timeout: 30m # 后台任务租约超时时间
   max_attempts: 3 # submit async 单张图片失败后的最大重试次数
 
 backend:
-  type: built_in_codex
-  command: codex
-  model: gpt-5.4
-  cwd: ""
-  timeout: 90s
+  type: built_in_codex # 使用本机 Codex CLI 调用内置 $imagegen
+  command: codex # Codex CLI 命令名或可执行文件路径
+  model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
+  cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
+  timeout: 90s # 单次 Codex/imagegen 调用超时时间
   prompt:
-    prefix: "$imagegen"
-    prelude: |
+    prefix: "$imagegen" # 自动加到 prompt 前面的前缀
+    prelude: | # 固定提示词说明，用于统一默认风格和输出约束
       使用内置 imagegen 技能。
       输出单张图片。
       默认适合网页或品牌资产场景。
@@ -32,15 +34,16 @@ realtime:
   max_sessions: 4 # 同时最多允许多少个活跃 WebSocket 生图 session
   max_items_per_session: 8 # 单个 WebSocket generate.start 最多包含多少个 item
   max_count_per_item: 1 # 单个 realtime item 最多生成多少张图
-  item_timeout: 300s # 单个 realtime item 生成超时时间
+  item_timeout: 300s # 单个 realtime item 默认生成超时
+  max_item_timeout: 300s # 客户端 timeout_ms 允许的最大值；通常与 item_timeout 保持一致
 
 email:
-  enabled: false
-  smtp_host: smtp.example.com
-  smtp_port: 465
-  from: from@example.com
-  to: to@example.com
-  timeout: 3s
-  retry_times: 3
-  retry_wait_time: 500ms
-  use_proxy: false
+  enabled: false # 是否启用维护失败邮件通知
+  smtp_host: smtp.example.com # SMTP 服务器地址
+  smtp_port: 465 # SMTP 端口；465 使用隐式 TLS
+  from: from@example.com # 发件人邮箱，也是 SMTP 登录账号
+  to: to@example.com # 收件人邮箱
+  timeout: 3s # 单次 SMTP 连接和发送超时
+  retry_times: 3 # 邮件发送最大尝试次数
+  retry_wait_time: 500ms # 邮件发送失败后的重试间隔
+  use_proxy: false # SMTP 发送暂不支持代理；保持 false

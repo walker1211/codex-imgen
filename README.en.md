@@ -133,51 +133,54 @@ Then edit `configs/config.yaml` as needed:
 
 ```yaml
 server:
-  listen: 127.0.0.1:18080
-  read_timeout: 5s
-  write_timeout: 30s
+  listen: 127.0.0.1:18080 # Service listen address; local-only by default
+  read_timeout: 5s # HTTP request read timeout
+  write_timeout: 30s # HTTP response write timeout
 
 storage:
-  data_dir: ""
-  sqlite_path: ""
+  data_dir: "" # Service data directory; empty uses the OS user data directory
+  sqlite_path: "" # SQLite database path; empty uses data_dir/imgen.db
 
 scheduler:
-  global_max_concurrency: 10
-  max_count_per_job: 10
-  maintenance_interval: 5m
-  task_lease_timeout: 30m
-  max_attempts: 3
-
-realtime:
-  enabled: true
-  max_sessions: 4
-  max_items_per_session: 8
-  max_count_per_item: 1
-  item_timeout: 300s
+  global_max_concurrency: 10 # Shared serve-mode generation queue cap for submit async and WebSocket realtime
+  default_job_concurrency: 2 # Default per-job concurrency when submit omits --concurrency
+  max_job_concurrency: 10 # Maximum per-job concurrency for submit async jobs
+  max_count_per_job: 10 # Maximum image count for one submit async job
+  maintenance_interval: 5m # Background maintenance interval
+  task_lease_timeout: 30m # Background task lease timeout
+  max_attempts: 3 # Maximum retry attempts per image in submit async jobs
 
 backend:
-  type: built_in_codex
-  command: codex
-  model: gpt-5.4
-  cwd: ""
-  timeout: 90s
+  type: built_in_codex # Use local Codex CLI with the built-in $imagegen skill
+  command: codex # Codex CLI command name or executable path
+  model: "" # Empty uses the Codex CLI default model; set this only when pinning a model
+  cwd: "" # Codex CLI working directory; empty uses the current process directory
+  timeout: 90s # Timeout for one Codex/imagegen invocation
   prompt:
-    prefix: "$imagegen"
-    prelude: |
+    prefix: "$imagegen" # Prefix prepended to every prompt
+    prelude: | # Fixed prompt prelude for default style/output constraints
       Use the built-in imagegen skill.
       Output a single image.
       Default to web or brand asset scenarios.
 
+realtime:
+  enabled: true # Whether to enable the WebSocket realtime generation endpoint
+  max_sessions: 4 # Maximum active WebSocket generation sessions
+  max_items_per_session: 8 # Maximum items in one WebSocket generate.start frame
+  max_count_per_item: 1 # Maximum image count for one realtime item
+  item_timeout: 300s # Default timeout for one realtime item
+  max_item_timeout: 300s # Maximum client timeout_ms; usually keep this equal to item_timeout
+
 email:
-  enabled: false
-  smtp_host: smtp.example.com
-  smtp_port: 465
-  from: from@example.com
-  to: to@example.com
-  timeout: 3s
-  retry_times: 3
-  retry_wait_time: 500ms
-  use_proxy: false
+  enabled: false # Whether to enable maintenance failure email notification
+  smtp_host: smtp.example.com # SMTP server host
+  smtp_port: 465 # SMTP port; 465 uses implicit TLS
+  from: from@example.com # Sender email and SMTP login identity
+  to: to@example.com # Recipient email
+  timeout: 3s # Timeout for one SMTP connection/send attempt
+  retry_times: 3 # Maximum email send attempts
+  retry_wait_time: 500ms # Wait duration between failed email attempts
+  use_proxy: false # SMTP proxying is not supported yet; keep false
 ```
 
 Configuration fields:
@@ -188,6 +191,8 @@ Configuration fields:
 - `storage.data_dir`: async service data directory. If empty, the user data directory is used. For local development, `./.data` is a good choice.
 - `storage.sqlite_path`: SQLite database path. If empty, `data_dir/imgen.db` is used. For local development, `./.data/imgen.db` is a good choice.
 - `scheduler.global_max_concurrency`: serve-mode bottom generation queue cap shared by async `submit` jobs and WebSocket realtime; it does not affect local sync shorthand generation with `imgen "prompt"`.
+- `scheduler.default_job_concurrency`: default async `submit` job concurrency when `--concurrency` is omitted.
+- `scheduler.max_job_concurrency`: maximum async `submit` job concurrency.
 - `scheduler.max_count_per_job`: maximum image count for one async job; larger `--count` input is clamped to this value.
 - `scheduler.maintenance_interval`: service-mode maintenance interval for checks, failure progression, and failure notification.
 - `scheduler.task_lease_timeout`: running-task lease timeout used to detect expired work.
@@ -196,7 +201,8 @@ Configuration fields:
 - `realtime.max_sessions`: maximum active WebSocket generation sessions at the same time.
 - `realtime.max_items_per_session`: maximum items in one WebSocket `generate.start` frame.
 - `realtime.max_count_per_item`: maximum image count per realtime item.
-- `realtime.item_timeout`: timeout for one realtime item; realtime no longer has its own backend global queue.
+- `realtime.item_timeout`: default timeout for one realtime item; realtime no longer has its own backend global queue.
+- `realtime.max_item_timeout`: maximum client `timeout_ms`; usually keep it equal to `item_timeout`.
 - `backend.type`: generation backend type. Currently use `built_in_codex`.
 - `backend.command`: Codex CLI command. Defaults to `codex`; the built-in backend currently requires this command to support `exec --json`.
 - `backend.model`: model name passed to Codex CLI. If empty, the configured Codex backend chooses its default model.
@@ -268,6 +274,15 @@ Integrations should follow this minimal contract:
 4. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
 
 For Telegram multi-image requests that need distinct themes, OpenClaw should run independent `./imgen --json --count 1 --concurrency 1` commands concurrently, send each completed `images[].path` immediately with the `message` tool, use `forceDocument` or `asDocument` for original PNG delivery, and return exactly `NO_REPLY` after direct delivery.
+
+### OpenClaw + Telegram quick start
+
+1. Run `./skill-sync --apply` to sync the imgen skill, then restart OpenClaw.
+2. Run `./imgen doctor openclaw` and confirm `message send supports --force-document` is OK and there are no FAIL lines.
+3. Send a Telegram test message, for example: `Generate 3 cat Mac wallpapers with different moods`.
+4. Expect 3 image files/documents. Brief status text and captions are fine, but the literal `NO_REPLY` should not be visible.
+
+`NO_REPLY` is the silent completion signal for OpenClaw: after files have been delivered directly to Telegram, the agent should not add a final text reply.
 
 For the full OpenClaw reproduction and configuration checklist, see [OpenClaw imgen Integration](./docs/openclaw-imgen-integration.md).
 

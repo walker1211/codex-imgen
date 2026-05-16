@@ -47,14 +47,12 @@ type PromptConfig struct {
 }
 
 type RealtimeConfig struct {
-	Enabled                  bool          `yaml:"enabled"`
-	MaxSessions              int           `yaml:"max_sessions"`
-	MaxItemsPerSession       int           `yaml:"max_items_per_session"`
-	MaxConcurrencyPerSession int           `yaml:"max_concurrency_per_session"`
-	GlobalConcurrency        int           `yaml:"global_concurrency"`
-	MaxCountPerItem          int           `yaml:"max_count_per_item"`
-	ItemTimeout              time.Duration `yaml:"item_timeout"`
-	MaxItemTimeout           time.Duration `yaml:"max_item_timeout"`
+	Enabled            bool          `yaml:"enabled"`
+	MaxSessions        int           `yaml:"max_sessions"`
+	MaxItemsPerSession int           `yaml:"max_items_per_session"`
+	MaxCountPerItem    int           `yaml:"max_count_per_item"`
+	ItemTimeout        time.Duration `yaml:"item_timeout"`
+	MaxItemTimeout     time.Duration `yaml:"max_item_timeout"`
 }
 
 func defaultRealtimeConfig() RealtimeConfig {
@@ -64,6 +62,7 @@ func defaultRealtimeConfig() RealtimeConfig {
 		MaxItemsPerSession: 8,
 		MaxCountPerItem:    1,
 		ItemTimeout:        300 * time.Second,
+		MaxItemTimeout:     300 * time.Second,
 	}
 }
 

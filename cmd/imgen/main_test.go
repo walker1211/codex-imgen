@@ -29,6 +29,40 @@ func TestServeGeneratorUsesSchedulerGlobalMaxConcurrency(t *testing.T) {
 	waitForMainTestWorkers(t, &wg)
 }
 
+func TestRealtimeOptionsUsesConfig(t *testing.T) {
+	fake := newBlockingMainTestGenerator(1)
+	cfg := config.Default()
+	cfg.Backend.Prompt.Prefix = "$custom"
+	cfg.Backend.Prompt.Prelude = "prelude"
+	cfg.Realtime.Enabled = false
+	cfg.Realtime.ItemTimeout = 45 * time.Second
+	cfg.Realtime.MaxItemTimeout = 2 * time.Minute
+	cfg.Realtime.MaxSessions = 7
+	cfg.Realtime.MaxItemsPerSession = 8
+	cfg.Realtime.MaxCountPerItem = 3
+
+	options := realtimeOptions(fake, cfg)
+
+	if options.Enabled {
+		t.Fatal("expected realtime disabled")
+	}
+	if options.Generator != fake {
+		t.Fatalf("realtime generator was not shared")
+	}
+	if options.PromptPrefix != "$custom" || options.PromptPrelude != "prelude" {
+		t.Fatalf("prompt options = %q / %q", options.PromptPrefix, options.PromptPrelude)
+	}
+	if options.DefaultItemTimeout != 45*time.Second {
+		t.Fatalf("default item timeout = %s", options.DefaultItemTimeout)
+	}
+	if options.MaxItemTimeout != 2*time.Minute {
+		t.Fatalf("max item timeout = %s", options.MaxItemTimeout)
+	}
+	if options.MaxSessions != 7 || options.MaxItemsPerSession != 8 || options.MaxCountPerItem != 3 {
+		t.Fatalf("limits = %+v", options)
+	}
+}
+
 type blockingMainTestGenerator struct {
 	entered chan backend.GenerateRequest
 	release chan struct{}
