@@ -73,6 +73,37 @@ func waitForJobStatus(t *testing.T, svc *Service, jobID string, status string) {
 	t.Fatalf("job %s did not reach status %s", jobID, status)
 }
 
+func waitForImageAttempts(t *testing.T, s *store.Store, jobID string, ready func([]store.JobImageAttempt) bool) []store.JobImageAttempt {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last []store.JobImageAttempt
+	for time.Now().Before(deadline) {
+		attempts, err := s.ListImageAttempts(context.Background(), jobID)
+		if err != nil {
+			t.Fatalf("ListImageAttempts returned error: %v", err)
+		}
+		last = attempts
+		if ready(attempts) {
+			return attempts
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("image attempts did not reach expected state: %+v", last)
+	return nil
+}
+
+func requireJobOrImageCancelled(t *testing.T, svc *Service, jobID string) {
+	t.Helper()
+	got, err := svc.GetJob(jobID)
+	if err != nil {
+		t.Fatalf("GetJob returned error: %v", err)
+	}
+	if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
+		return
+	}
+	t.Fatalf("job/image status = %+v", got)
+}
+
 func createRunningJobAttempt(t *testing.T, s *store.Store, jobID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -541,28 +572,13 @@ func TestServiceRecordsCancelledAttemptWhenGeneratorContextCancelled(t *testing.
 		t.Fatalf("CancelJob returned error: %v", err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		got, err := svc.GetJob(created.JobID)
-		if err != nil {
-			t.Fatalf("GetJob returned error: %v", err)
-		}
-		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
-			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
-			if err != nil {
-				t.Fatalf("ListImageAttempts returned error: %v", err)
-			}
-			if len(attempts) != 1 {
-				t.Fatalf("attempts = %d", len(attempts))
-			}
-			if attempts[0].Status != "cancelled" || attempts[0].Path != "" || attempts[0].URI != "" {
-				t.Fatalf("attempt = %+v", attempts[0])
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	attempts := waitForImageAttempts(t, s, created.JobID, func(attempts []store.JobImageAttempt) bool {
+		return len(attempts) == 1 && attempts[0].Status == "cancelled"
+	})
+	if attempts[0].Path != "" || attempts[0].URI != "" {
+		t.Fatalf("attempt = %+v", attempts[0])
 	}
-	t.Fatal("job/image did not cancel in time")
+	requireJobOrImageCancelled(t, &svc, created.JobID)
 }
 
 func TestServiceRecordsCancelledAttemptAfterGenerateReturnsSuccess(t *testing.T) {
@@ -598,28 +614,13 @@ func TestServiceRecordsCancelledAttemptAfterGenerateReturnsSuccess(t *testing.T)
 	}
 	close(gen.release)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		got, err := svc.GetJob(created.JobID)
-		if err != nil {
-			t.Fatalf("GetJob returned error: %v", err)
-		}
-		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
-			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
-			if err != nil {
-				t.Fatalf("ListImageAttempts returned error: %v", err)
-			}
-			if len(attempts) != 1 {
-				t.Fatalf("attempts = %d", len(attempts))
-			}
-			if attempts[0].Status != "cancelled" || attempts[0].Path != "" || attempts[0].URI != "" {
-				t.Fatalf("attempt = %+v", attempts[0])
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	attempts := waitForImageAttempts(t, s, created.JobID, func(attempts []store.JobImageAttempt) bool {
+		return len(attempts) == 1 && attempts[0].Status == "cancelled"
+	})
+	if attempts[0].Path != "" || attempts[0].URI != "" {
+		t.Fatalf("attempt = %+v", attempts[0])
 	}
-	t.Fatal("job/image did not cancel in time")
+	requireJobOrImageCancelled(t, &svc, created.JobID)
 }
 
 func TestServiceRecordsCancelledAttemptDuringRetryDelay(t *testing.T) {
@@ -654,31 +655,16 @@ func TestServiceRecordsCancelledAttemptDuringRetryDelay(t *testing.T) {
 		t.Fatalf("CancelJob returned error: %v", err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		got, err := svc.GetJob(created.JobID)
-		if err != nil {
-			t.Fatalf("GetJob returned error: %v", err)
-		}
-		if got.Status == "cancelled" || len(got.Images) == 1 && got.Images[0].Status == "cancelled" {
-			attempts, err := s.ListImageAttempts(context.Background(), created.JobID)
-			if err != nil {
-				t.Fatalf("ListImageAttempts returned error: %v", err)
-			}
-			if len(attempts) != 2 {
-				t.Fatalf("attempts = %d", len(attempts))
-			}
-			if attempts[0].Attempt != 1 || attempts[0].Status != "failed" || !strings.Contains(attempts[0].LastError, "first attempt failed") {
-				t.Fatalf("attempt 1 = %+v", attempts[0])
-			}
-			if attempts[1].Attempt != 2 || attempts[1].Status != "cancelled" || attempts[1].Path != "" || attempts[1].URI != "" {
-				t.Fatalf("attempt 2 = %+v", attempts[1])
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	attempts := waitForImageAttempts(t, s, created.JobID, func(attempts []store.JobImageAttempt) bool {
+		return len(attempts) == 2 && attempts[1].Status == "cancelled"
+	})
+	if attempts[0].Attempt != 1 || attempts[0].Status != "failed" || !strings.Contains(attempts[0].LastError, "first attempt failed") {
+		t.Fatalf("attempt 1 = %+v", attempts[0])
 	}
-	t.Fatal("job/image did not cancel in time")
+	if attempts[1].Attempt != 2 || attempts[1].Path != "" || attempts[1].URI != "" {
+		t.Fatalf("attempt 2 = %+v", attempts[1])
+	}
+	requireJobOrImageCancelled(t, &svc, created.JobID)
 }
 
 func TestServiceReusesLastRetryDelayWhenAttemptsExceedDelays(t *testing.T) {
