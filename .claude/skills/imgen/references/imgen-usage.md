@@ -206,7 +206,7 @@ Expected synchronous JSON result:
   "completed": 1,
   "failed": 0,
   "images": [
-    {"index": 0, "status": "completed", "path": "/local/path.png", "uri": "file:///local/path.png"}
+    {"index": 1, "status": "done", "path": "/local/path.png", "uri": "file:///local/path.png"}
   ]
 }
 ```

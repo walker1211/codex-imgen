@@ -60,6 +60,12 @@
       "prompt": "什么时候 OpenClaw 才应该用 imgen submit 或 WebSocket realtime，而不是直接 ./imgen --json？",
       "expected_output": "Explain that ./imgen --json synchronous CLI is the default for direct image paths. Use submit/service only when the caller needs server-side job management, polling, cancellation, or recovery. Use /v1/realtime/generate/ws only when imgen serve is running and the caller needs live streaming events for a WebSocket session; realtime should not create submit jobs or store rows. Mention that submit and realtime share scheduler.global_max_concurrency inside serve, while sync CLI does not.",
       "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "./imgen --json 返回 ok=true、顶层 status=completed，但 images[0].status=done 且有 path。OpenClaw 应该判成功还是失败？",
+      "expected_output": "Treat this as successful when ok is true and the expected images contain non-empty path values. Do not require per-image status to be completed; synchronous CLI image entries may use status done. Verify the local path exists before delivery, then send that exact path.",
+      "files": []
     }
   ]
 }
