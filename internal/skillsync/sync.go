@@ -162,41 +162,49 @@ func FindRepositoryRoot(cwd string) (string, error) {
 	}
 }
 
-func compareRepositoryMirror(sourceDir string, mirrorDir string) ([]string, error) {
+func CompareSkillTrees(sourceDir string, destinationDir string, label string) ([]string, error) {
+	return compareSkillTrees(sourceDir, destinationDir, label, label)
+}
+
+func compareSkillTrees(sourceDir string, destinationDir string, label string, missingLabel string) ([]string, error) {
 	sourceFiles, err := listFiles(sourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("read claude repository skill: %w", err)
+		return nil, fmt.Errorf("read source skill: %w", err)
 	}
-	mirrorFiles, err := listFiles(mirrorDir)
+	destinationFiles, err := listFiles(destinationDir)
 	if errors.Is(err, fs.ErrNotExist) {
-		return []string{fmt.Sprintf("repo openclaw skill missing: %s", mirrorDir)}, nil
+		return []string{fmt.Sprintf("%s missing: %s", missingLabel, destinationDir)}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read openclaw repository skill: %w", err)
+		return nil, fmt.Errorf("read %s: %w", label, err)
 	}
 
 	var drift []string
 	for rel, sourcePath := range sourceFiles {
-		mirrorPath, ok := mirrorFiles[rel]
+		destinationPath, ok := destinationFiles[rel]
 		if !ok {
-			drift = append(drift, fmt.Sprintf("repo openclaw file missing: %s", rel))
+			drift = append(drift, fmt.Sprintf("%s file missing: %s", label, rel))
 			continue
 		}
-		same, err := sameFile(sourcePath, mirrorPath)
+		same, err := sameFile(sourcePath, destinationPath)
 		if err != nil {
 			return nil, err
 		}
 		if !same {
-			drift = append(drift, fmt.Sprintf("repo openclaw file differs: %s", rel))
+			drift = append(drift, fmt.Sprintf("%s file differs: %s", label, rel))
 		}
 	}
-	for rel := range mirrorFiles {
+	for rel := range destinationFiles {
 		if _, ok := sourceFiles[rel]; !ok {
-			drift = append(drift, fmt.Sprintf("repo openclaw extra file: %s", rel))
+			drift = append(drift, fmt.Sprintf("%s extra file: %s", label, rel))
 		}
 	}
 	sort.Strings(drift)
 	return drift, nil
+}
+
+func compareRepositoryMirror(sourceDir string, mirrorDir string) ([]string, error) {
+	return compareSkillTrees(sourceDir, mirrorDir, "repo openclaw", "repo openclaw skill")
 }
 
 func comparePair(pair Pair) ([]string, error) {

@@ -93,6 +93,29 @@ func TestCheckReportsChangedTargetFile(t *testing.T) {
 	}
 }
 
+func TestCompareSkillTreesReportsDifferences(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source")
+	destination := filepath.Join(t.TempDir(), "destination")
+	writeFile(t, filepath.Join(source, "SKILL.md"), "source skill")
+	writeFile(t, filepath.Join(source, "references", "imgen-usage.md"), "usage")
+	writeFile(t, filepath.Join(destination, "SKILL.md"), "changed skill")
+	writeFile(t, filepath.Join(destination, "extra.md"), "extra")
+
+	drift, err := CompareSkillTrees(source, destination, "openclaw skill")
+	if err != nil {
+		t.Fatalf("CompareSkillTrees returned error: %v", err)
+	}
+	if !containsLine(drift, "openclaw skill file differs: SKILL.md") {
+		t.Fatalf("expected changed SKILL.md drift, got %v", drift)
+	}
+	if !containsLine(drift, "openclaw skill file missing: references/imgen-usage.md") {
+		t.Fatalf("expected missing reference drift, got %v", drift)
+	}
+	if !containsLine(drift, "openclaw skill extra file: extra.md") {
+		t.Fatalf("expected extra file drift, got %v", drift)
+	}
+}
+
 func TestCheckReportsRepositorySkillMismatch(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
@@ -106,6 +129,27 @@ func TestCheckReportsRepositorySkillMismatch(t *testing.T) {
 	}
 	if !containsLine(result.Drift, "repo openclaw file differs: SKILL.md") {
 		t.Fatalf("expected repo skill drift, got %v", result.Drift)
+	}
+}
+
+func TestCheckReportsMissingRepositoryMirrorWithLegacyMessage(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	paths := DefaultPaths(repoRoot, home)
+	if err := os.RemoveAll(filepath.Join(repoRoot, ".openclaw", "skills", "imgen")); err != nil {
+		t.Fatalf("RemoveAll returned error: %v", err)
+	}
+
+	result, err := paths.Check()
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !containsLine(result.Drift, "repo openclaw skill missing:") {
+		t.Fatalf("expected legacy missing repo mirror drift, got %v", result.Drift)
+	}
+	if containsLine(result.Drift, "repo openclaw missing:") {
+		t.Fatalf("expected missing repo mirror drift to keep legacy wording, got %v", result.Drift)
 	}
 }
 

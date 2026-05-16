@@ -105,7 +105,7 @@ go run ./cmd/skill-sync --apply
 ./imgen doctor openclaw
 ```
 
-该命令只读检查 `image_generate` deny、main agent 的 `message` 暴露、Telegram direct `NO_REPLY` 静默，以及 OpenClaw imgen skill 安装状态。
+该命令只读检查 `image_generate` deny、main agent 的 `message` 暴露、Telegram direct `NO_REPLY` 静默、OpenClaw `message send --force-document` 支持、OpenClaw imgen skill 安装与同步状态，以及同步 CLI JSON 成功判定契约。WARN 行不阻断；FAIL 行表示需要修复配置、OpenClaw CLI 能力或 skill 同步。
 
 ## 配置
 

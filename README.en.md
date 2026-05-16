@@ -105,7 +105,7 @@ Check whether the local OpenClaw setup satisfies the imgen / Telegram original-f
 ./imgen doctor openclaw
 ```
 
-This command only reads local state. It checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, and the OpenClaw imgen skill installation.
+This read-only command checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, OpenClaw `message send --force-document` support, OpenClaw imgen skill installation/sync state, and the synchronous CLI JSON success contract. WARN lines do not block; FAIL lines are actionable and mean the configuration, OpenClaw CLI capability, or skill sync needs fixing.
 
 ## Configuration
 

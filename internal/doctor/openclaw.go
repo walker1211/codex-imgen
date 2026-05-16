@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/walker1211/codex-imgen/internal/skillsync"
 )
 
 type Level string
@@ -49,12 +52,58 @@ func (r Report) Render() string {
 	return b.String()
 }
 
+type CommandRunner func(context.Context, string, ...string) (string, error)
+
 type OpenClawChecker struct {
-	HomeDir string
+	HomeDir    string
+	RepoRoot   string
+	LookPath   func(string) (string, error)
+	RunCommand CommandRunner
+	Getwd      func() (string, error)
 }
 
 func NewOpenClawChecker(homeDir string) OpenClawChecker {
 	return OpenClawChecker{HomeDir: homeDir}
+}
+
+func (c OpenClawChecker) lookPath(name string) (string, error) {
+	if c.LookPath != nil {
+		return c.LookPath(name)
+	}
+	return exec.LookPath(name)
+}
+
+func (c OpenClawChecker) runCommand(ctx context.Context, name string, args ...string) (string, error) {
+	if c.RunCommand != nil {
+		return c.RunCommand(ctx, name, args...)
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func (c OpenClawChecker) getwd() (string, error) {
+	if c.Getwd != nil {
+		return c.Getwd()
+	}
+	return os.Getwd()
+}
+
+func (c OpenClawChecker) repositoryRoot(report *Report) (string, bool) {
+	if c.RepoRoot != "" {
+		return c.RepoRoot, true
+	}
+	cwd, err := c.getwd()
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "repository root not checked: current working directory unavailable"})
+		return "", false
+	}
+	root, err := skillsync.FindRepositoryRoot(cwd)
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "repository root not checked: codex-imgen checkout not discoverable"})
+		return "", false
+	}
+	return root, true
 }
 
 func (c OpenClawChecker) Check(ctx context.Context) (Report, error) {
@@ -81,6 +130,10 @@ func (c OpenClawChecker) Check(ctx context.Context) (Report, error) {
 		}
 	}
 	checkOpenClawSkill(skillPath, &report)
+	if repoRoot, ok := c.repositoryRoot(&report); ok {
+		checkSkillSync(repoRoot, skillPath, &report)
+	}
+	checkOpenClawCLI(ctx, c, &report)
 
 	return report, nil
 }
@@ -154,6 +207,26 @@ func checkTelegramSilentReply(root map[string]any, report *Report) {
 	report.Items = append(report.Items, Item{Level: LevelFail, Message: "telegram direct NO_REPLY is not configured as silent"})
 }
 
+func checkOpenClawCLI(ctx context.Context, checker OpenClawChecker, report *Report) {
+	path, err := checker.lookPath("openclaw")
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "openclaw CLI not found on PATH; message send --force-document support not verified"})
+		return
+	}
+	report.Items = append(report.Items, Item{Level: LevelOK, Message: "openclaw CLI found: " + path})
+
+	output, err := checker.runCommand(ctx, path, "message", "send", "--help")
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "openclaw message send --help failed; force-document support not verified"})
+		return
+	}
+	if strings.Contains(output, "--force-document") {
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "openclaw CLI message send supports --force-document"})
+		return
+	}
+	report.Items = append(report.Items, Item{Level: LevelFail, Message: "openclaw CLI message send does not expose --force-document"})
+}
+
 func checkOpenClawSkill(path string, report *Report) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -167,11 +240,45 @@ func checkOpenClawSkill(path string, report *Report) {
 		"NO_REPLY":                 {"NO_REPLY"},
 		"forceDocument/asDocument": {"forceDocument", "asDocument"},
 	})
+	if !hasSyncJSONSuccessContract(text) {
+		missing = append(missing, "sync JSON success")
+	}
 	if len(missing) > 0 {
 		report.Items = append(report.Items, Item{Level: LevelFail, Message: "imgen skill is installed but missing guidance markers: " + strings.Join(missing, ", ")})
 		return
 	}
 	report.Items = append(report.Items, Item{Level: LevelOK, Message: "imgen skill installed for OpenClaw"})
+}
+
+func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *Report) {
+	sourceDir := filepath.Join(repoRoot, ".claude", "skills", "imgen")
+	repositoryOpenClawDir := filepath.Join(repoRoot, ".openclaw", "skills", "imgen")
+
+	drift, err := skillsync.CompareSkillTrees(sourceDir, repositoryOpenClawDir, "repository OpenClaw skill mirror")
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelFail, Message: "repository OpenClaw skill mirror check failed: " + err.Error()})
+	} else if len(drift) > 0 {
+		report.Items = append(report.Items, Item{Level: LevelFail, Message: "repository OpenClaw skill mirror drift: " + strings.Join(drift, "; ")})
+	} else {
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "repository OpenClaw skill mirror matches Claude source"})
+	}
+
+	installedOpenClawDir := filepath.Dir(installedOpenClawSkillPath)
+	drift, err = skillsync.CompareSkillTrees(sourceDir, installedOpenClawDir, "installed OpenClaw imgen skill")
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelFail, Message: "installed OpenClaw imgen skill check failed: " + err.Error()})
+	} else if len(drift) > 0 {
+		report.Items = append(report.Items, Item{Level: LevelFail, Message: "installed OpenClaw imgen skill drift: " + strings.Join(drift, "; ")})
+	} else {
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "installed OpenClaw imgen skill matches Claude source"})
+	}
+}
+
+func hasSyncJSONSuccessContract(text string) bool {
+	hasOK := strings.Contains(text, "ok=true") || strings.Contains(text, "ok true") || strings.Contains(text, "ok: true") || strings.Contains(text, "\"ok\": true")
+	hasPath := strings.Contains(text, "images[].path") || strings.Contains(text, "images[0].path") || strings.Contains(text, "images[*].path")
+	hasDone := strings.Contains(text, "status=done") || strings.Contains(text, "status done") || strings.Contains(text, "status can be done") || strings.Contains(text, "\"status\": \"done\"")
+	return hasOK && hasPath && hasDone
 }
 
 func missingMarkers(text string, markers map[string][]string) []string {
