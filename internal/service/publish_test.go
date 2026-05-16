@@ -124,35 +124,11 @@ func TestServicePublishesCompletionEvents(t *testing.T) {
 		t.Fatalf("CreateJob returned error: %v", err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		got, err := svc.GetJob(created.JobID)
-		if err != nil {
-			t.Fatalf("GetJob returned error: %v", err)
-		}
-		if got.Status == "completed" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	event := waitForJobEvent(t, pub, created.JobID, "job.completed")
+	if event.Status != "completed" {
+		t.Fatalf("status = %q", event.Status)
 	}
-	events := pub.Events()
-	if len(events) == 0 {
-		t.Fatal("expected published events")
-	}
-	last := events[len(events)-1]
-	if last.Type != "job.completed" {
-		t.Fatalf("type = %q", last.Type)
-	}
-	if last.JobID != created.JobID {
-		t.Fatalf("job id = %q", last.JobID)
-	}
-	if len(last.Payload) == 0 {
-		t.Fatal("expected payload")
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(last.Payload, &payload); err != nil {
-		t.Fatalf("Unmarshal returned error: %v", err)
-	}
+	assertJobEventPayload(t, event, "completed", 1, 1)
 }
 
 func TestServicePublishesPartialSuccessJobEventPayload(t *testing.T) {
