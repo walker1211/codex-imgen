@@ -56,7 +56,7 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 	record("process.starting", "")
 	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
 	cmd.Dir = req.Dir
-	cmd.Env = req.Env
+	cmd.Env = envWithCodexHome(req.Env, req.CodexHome)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -127,6 +127,19 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 		result.ExitCode = exitErr.ExitCode()
 	}
 	return result, waitErr
+}
+
+func envWithCodexHome(env []string, codexHome string) []string {
+	if codexHome == "" {
+		return env
+	}
+	filtered := make([]string, 0, len(env)+1)
+	for _, value := range env {
+		if !strings.HasPrefix(value, "CODEX_HOME=") {
+			filtered = append(filtered, value)
+		}
+	}
+	return append(filtered, "CODEX_HOME="+codexHome)
 }
 
 func readLines(reader io.Reader, output *bytes.Buffer, onLine func(string)) error {

@@ -246,6 +246,22 @@ func TestImageFileDetectorCleanupWaitsForInFlightRecord(t *testing.T) {
 	}
 }
 
+func TestRunnerRunOverridesInheritedCodexHome(t *testing.T) {
+	codexHome := t.TempDir()
+	result, err := (Runner{}).Run(context.Background(), Request{
+		Command:   "sh",
+		Args:      []string{"-c", "printf '%s' \"$CODEX_HOME\""},
+		Env:       []string{"CODEX_HOME=/tmp/openclaw-isolated", "PATH=/bin:/usr/bin"},
+		CodexHome: codexHome,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if strings.TrimSpace(result.Stdout) != codexHome {
+		t.Fatalf("CODEX_HOME = %q, want %q", result.Stdout, codexHome)
+	}
+}
+
 func phaseBefore(phases []string, before string, after string) bool {
 	beforeIndex := -1
 	afterIndex := -1
