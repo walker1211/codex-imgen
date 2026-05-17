@@ -138,6 +138,31 @@ func TestLoadParsesBackendDeliveryDir(t *testing.T) {
 	}
 }
 
+func TestLoadParsesBackendDeliveryMaxFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`backend:
+  delivery_max_files: 42
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Backend.DeliveryMaxFiles != 42 {
+		t.Fatalf("backend.delivery_max_files = %d", cfg.Backend.DeliveryMaxFiles)
+	}
+}
+
+func TestDefaultLimitsDeliveryDirFiles(t *testing.T) {
+	cfg := Default()
+	if cfg.Backend.DeliveryMaxFiles != 200 {
+		t.Fatalf("backend.delivery_max_files = %d, want 200", cfg.Backend.DeliveryMaxFiles)
+	}
+}
+
 func TestLoadReadsDeliveryDirEnv(t *testing.T) {
 	deliveryDir := filepath.Join(t.TempDir(), "media")
 	t.Setenv("IMGEN_DELIVERY_DIR", deliveryDir)

@@ -37,12 +37,13 @@ func main() {
 	}
 
 	generator := backend.BuiltinCodex{
-		Command:     cfg.Backend.Command,
-		Model:       cfg.Backend.Model,
-		CWD:         cfg.Backend.CWD,
-		Timeout:     cfg.Backend.Timeout,
-		DeliveryDir: cfg.Backend.DeliveryDir,
-		CodexHome:   filepath.Join(home, ".codex"),
+		Command:          cfg.Backend.Command,
+		Model:            cfg.Backend.Model,
+		CWD:              cfg.Backend.CWD,
+		Timeout:          cfg.Backend.Timeout,
+		DeliveryDir:      cfg.Backend.DeliveryDir,
+		DeliveryMaxFiles: cfg.Backend.DeliveryMaxFiles,
+		CodexHome:        filepath.Join(home, ".codex"),
 	}
 
 	app := cli.App{Stdout: os.Stdout, Stderr: os.Stderr}

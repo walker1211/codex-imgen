@@ -23,6 +23,7 @@ backend:
   cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
   timeout: 90s # 单次 Codex/imagegen 调用超时时间
   delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
+  delivery_max_files: 200 # delivery_dir 非空时最多保留的投递文件数；0 表示不自动清理
   prompt:
     prefix: "$imagegen" # 自动加到 prompt 前面的前缀
     prelude: | # 固定提示词说明，用于统一默认风格和输出约束

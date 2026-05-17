@@ -134,6 +134,40 @@ func TestBuiltinCodexGenerateCopiesImageToDeliveryDir(t *testing.T) {
 	}
 }
 
+func TestBuiltinCodexGeneratePrunesDeliveryDirToMaxFiles(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, "ig_new.png")
+	if err := os.WriteFile(sourcePath, []byte("new"), 0o644); err != nil {
+		t.Fatalf("WriteFile source failed: %v", err)
+	}
+	deliveryDir := t.TempDir()
+	oldPath := writeDeliveryFile(t, deliveryDir, "old.png", "old", time.Now().Add(-3*time.Hour))
+	keepPath := writeDeliveryFile(t, deliveryDir, "keep.png", "keep", time.Now().Add(-1*time.Hour))
+	backend := BuiltinCodex{
+		Command:          "codex",
+		DeliveryDir:      deliveryDir,
+		DeliveryMaxFiles: 2,
+		Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+			return codex.RunResult{Stdout: "Saved to: file://" + sourcePath + "\n"}, nil
+		}),
+	}
+
+	result, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Fatalf("new delivery file missing: %v", err)
+	}
+	if _, err := os.Stat(keepPath); err != nil {
+		t.Fatalf("newer existing delivery file missing: %v", err)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old delivery file stat err = %v, want not exist", err)
+	}
+}
+
 func TestCopyImageToDeliveryDirAvoidsSameBasenameCollisions(t *testing.T) {
 	sourceRoot := t.TempDir()
 	firstSource := filepath.Join(sourceRoot, "thread-a", "image.png")
@@ -218,6 +252,18 @@ func TestCopyImageToDeliveryDirAvoidsSameParentDirectoryCollisions(t *testing.T)
 	if string(firstContent) != "first" || string(secondContent) != "second" {
 		t.Fatalf("copied content = %q/%q, want first/second", firstContent, secondContent)
 	}
+}
+
+func writeDeliveryFile(t *testing.T, dir string, name string, content string, modTime time.Time) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile delivery file failed: %v", err)
+	}
+	if err := os.Chtimes(path, modTime, modTime); err != nil {
+		t.Fatalf("Chtimes delivery file failed: %v", err)
+	}
+	return path
 }
 
 func TestBuiltinCodexGenerateRecordsParserPhases(t *testing.T) {

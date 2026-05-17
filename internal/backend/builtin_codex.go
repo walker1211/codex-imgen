@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,13 +22,14 @@ type CommandRunner interface {
 }
 
 type BuiltinCodex struct {
-	Command     string
-	Model       string
-	CWD         string
-	Timeout     time.Duration
-	DeliveryDir string
-	CodexHome   string
-	Runner      CommandRunner
+	Command          string
+	Model            string
+	CWD              string
+	Timeout          time.Duration
+	DeliveryDir      string
+	DeliveryMaxFiles int
+	CodexHome        string
+	Runner           CommandRunner
 }
 
 func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
@@ -90,6 +92,9 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 		if err != nil {
 			return GenerateResult{}, err
 		}
+		if err := pruneDeliveryDir(b.DeliveryDir, b.DeliveryMaxFiles); err != nil {
+			return GenerateResult{}, err
+		}
 		uri = (&url.URL{Scheme: "file", Path: path}).String()
 	}
 	return GenerateResult{Path: path, URI: uri, RawOutput: result.Stdout + result.Stderr}, nil
@@ -120,6 +125,51 @@ func deliveryFileName(sourcePath string) string {
 		return hash + "-" + base
 	}
 	return parent + "-" + hash + "-" + base
+}
+
+func pruneDeliveryDir(deliveryDir string, maxFiles int) error {
+	if maxFiles <= 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(deliveryDir)
+	if err != nil {
+		return err
+	}
+	type deliveryFile struct {
+		path    string
+		name    string
+		modTime time.Time
+	}
+	files := make([]deliveryFile, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		files = append(files, deliveryFile{
+			path:    filepath.Join(deliveryDir, entry.Name()),
+			name:    entry.Name(),
+			modTime: info.ModTime(),
+		})
+	}
+	if len(files) <= maxFiles {
+		return nil
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].modTime.Equal(files[j].modTime) {
+			return files[i].name > files[j].name
+		}
+		return files[i].modTime.After(files[j].modTime)
+	})
+	for _, file := range files[maxFiles:] {
+		if err := os.Remove(file.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b BuiltinCodex) command() string {

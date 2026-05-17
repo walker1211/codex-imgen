@@ -33,13 +33,14 @@ type SchedulerConfig struct {
 }
 
 type BackendConfig struct {
-	Type        string        `yaml:"type"`
-	Command     string        `yaml:"command"`
-	Model       string        `yaml:"model"`
-	CWD         string        `yaml:"cwd"`
-	Timeout     time.Duration `yaml:"timeout"`
-	DeliveryDir string        `yaml:"delivery_dir"`
-	Prompt      PromptConfig  `yaml:"prompt"`
+	Type             string        `yaml:"type"`
+	Command          string        `yaml:"command"`
+	Model            string        `yaml:"model"`
+	CWD              string        `yaml:"cwd"`
+	Timeout          time.Duration `yaml:"timeout"`
+	DeliveryDir      string        `yaml:"delivery_dir"`
+	DeliveryMaxFiles int           `yaml:"delivery_max_files"`
+	Prompt           PromptConfig  `yaml:"prompt"`
 }
 
 type PromptConfig struct {
@@ -104,9 +105,10 @@ func Default() Config {
 			MaxAttempts:           3,
 		},
 		Backend: BackendConfig{
-			Type:    "built_in_codex",
-			Command: "codex",
-			Timeout: 90 * time.Second,
+			Type:             "built_in_codex",
+			Command:          "codex",
+			Timeout:          90 * time.Second,
+			DeliveryMaxFiles: 200,
 			Prompt: PromptConfig{
 				Prefix: "$imagegen",
 			},
