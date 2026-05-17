@@ -68,6 +68,16 @@ For Telegram delivery:
 
 If the `message` tool is unavailable, the fallback is to return one `MEDIA:/absolute/path/to/image.png` line for each completed image.
 
+## Delivery directory
+
+OpenClaw/TG integrations should make the synchronous CLI return paths under a local directory that OpenClaw is allowed to send from. Set `IMGEN_DELIVERY_DIR` for each call, or configure local `backend.delivery_dir` in `configs/config.yaml`.
+
+```bash
+IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count 1 --concurrency 1 "Theme, single image"
+```
+
+When using local config, also consider `backend.delivery_max_files` to cap retained delivery files. The default keeps 200 regular files; set it to 0 to disable automatic cleanup.
+
 ## Execution contract
 
 A platform-neutral synchronous call looks like this:

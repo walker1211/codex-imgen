@@ -68,6 +68,16 @@ Telegram 投递要求：
 
 如果 `message` 工具不可用，fallback 是为每张完成图片返回一行 `MEDIA:/absolute/path/to/image.png`。
 
+## 投递目录
+
+OpenClaw/TG 集成建议把同步 CLI 的返回路径限制在 OpenClaw 可发送的本地目录下。可以在每次调用时设置 `IMGEN_DELIVERY_DIR`，也可以在本地 `configs/config.yaml` 中配置 `backend.delivery_dir`。
+
+```bash
+IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count 1 --concurrency 1 "主题，单图"
+```
+
+如果使用本地配置，建议同时设置 `backend.delivery_max_files` 控制投递目录保留文件数。默认保留 200 个普通文件；设为 0 可关闭自动清理。
+
 ## 执行契约
 
 平台无关的同步调用形态如下：

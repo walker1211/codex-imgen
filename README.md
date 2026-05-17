@@ -17,6 +17,7 @@ If you only need one image once, native `codex exec` is enough. If you need repe
 - Async local service with `submit`, `status`, `get`, `list`, and `cancel`
 - `--count` and `--concurrency` controls for batch-style workflows
 - Job-scoped WebSocket events for local integrations
+- OpenClaw/TG integration checks for original-file image delivery
 - YAML configuration for structured settings and `.env` for secrets
 - Go-first implementation that builds into local binaries
 

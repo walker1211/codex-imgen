@@ -15,6 +15,7 @@ Codex CLI already has image generation. `codex-imgen` focuses on the engineering
 - Submit async jobs and query them later with `status`, `get`, `list`, and `cancel`
 - Control candidate generation with `--count` and `--concurrency`
 - Subscribe to job-scoped WebSocket events from local tools and agents
+- Check OpenClaw/TG original-file delivery contracts and skill sync drift
 - Keep structured settings in `configs/config.yaml` and secrets in `.env`
 
 If you only need one image once, native `codex exec` is enough. If you need repeatable generation, batching, job tracking, or local integration, use `codex-imgen`.
@@ -105,7 +106,7 @@ Check whether the local OpenClaw setup satisfies the imgen / Telegram original-f
 ./imgen doctor openclaw
 ```
 
-This read-only command checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, OpenClaw `message send --force-document` support, OpenClaw imgen skill installation/sync state, and the synchronous CLI JSON success contract. WARN lines do not block; FAIL lines are actionable and mean the configuration, OpenClaw CLI capability, or skill sync needs fixing.
+This read-only command checks the `image_generate` deny rules, main agent `message` exposure, Telegram direct `NO_REPLY` silence, OpenClaw `message send --force-document` support, OpenClaw imgen skill installation/sync state, the `IMGEN_DELIVERY_DIR` / `forceDocument` / `asDocument` call contract, the synchronous CLI JSON success contract, and whether local `backend.delivery_dir` is under an OpenClaw-sendable root. WARN lines do not block; FAIL lines are actionable and mean the configuration, OpenClaw CLI capability, or skill sync needs fixing.
 
 ## Configuration
 
@@ -156,6 +157,8 @@ backend:
   model: "" # Empty uses the Codex CLI default model; set this only when pinning a model
   cwd: "" # Codex CLI working directory; empty uses the current process directory
   timeout: 90s # Timeout for one Codex/imagegen invocation
+  delivery_dir: "" # Optional: copy generated images there; OpenClaw/TG can point this at an allowed workspace/media directory
+  delivery_max_files: 200 # Max files to retain in delivery_dir when set; 0 disables automatic cleanup
   prompt:
     prefix: "$imagegen" # Prefix prepended to every prompt
     prelude: | # Fixed prompt prelude for default style/output constraints
@@ -208,6 +211,8 @@ Configuration fields:
 - `backend.model`: model name passed to Codex CLI. If empty, the configured Codex backend chooses its default model.
 - `backend.cwd`: Codex CLI working directory. If empty, the current process working directory is used. `~/` is expanded.
 - `backend.timeout`: timeout for one Codex/imagegen invocation. Increase it if generation frequently times out.
+- `backend.delivery_dir`: optional delivery directory. When set, generated images are copied there and the copied path is returned. OpenClaw/TG can point this at an allowed workspace/media directory.
+- `backend.delivery_max_files`: maximum retained files in `delivery_dir` when set. Defaults to `200`; set `0` to disable automatic cleanup.
 - `backend.prompt.prefix`: prefix automatically prepended to prompts, usually `$imagegen`.
 - `backend.prompt.prelude`: fixed prompt prelude for default style and output constraints.
 - `email.enabled`: whether to enable maintenance failure email notification.
@@ -270,8 +275,9 @@ Integrations should follow this minimal contract:
 
 1. Resolve the config working directory before calling the CLI: prefer `IMGEN_REPO_ROOT`; otherwise walk upward from the current directory until finding `configs/config.yaml` plus `./imgen`, `build.sh`, or `go.mod`; then try explicit user-provided install paths. Do not scan the whole filesystem.
 2. Run `./imgen --json ...` from that directory, or use `./imgen get --json <job-id>` in service mode.
-3. Synchronous success requires `ok: true` and non-empty `images[].path` values for the expected images; service jobs expose final files through `images[].path` after completion.
-4. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
+3. For OpenClaw/TG, use `IMGEN_DELIVERY_DIR` or `backend.delivery_dir` to copy images into an OpenClaw-sendable workspace/media directory, and use `delivery_max_files` to cap retained delivery files.
+4. Synchronous success requires `ok: true` and non-empty `images[].path` values for the expected images; service jobs expose final files through `images[].path` after completion.
+5. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
 
 For Telegram multi-image requests that need distinct themes, OpenClaw should run independent `./imgen --json --count 1 --concurrency 1` commands concurrently, send each completed `images[].path` immediately with the `message` tool, use `forceDocument` or `asDocument` for original PNG delivery, and return exactly `NO_REPLY` after direct delivery.
 

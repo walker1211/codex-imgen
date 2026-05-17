@@ -15,6 +15,7 @@ Codex CLI 本身已经有图像生成能力。`codex-imgen` 关注的是它外�
 - 用 `submit`、`status`、`get`、`list`、`cancel` 提交和查询异步任务
 - 用 `--count` 和 `--concurrency` 控制候选数量与并发
 - 通过按任务订阅的 WebSocket 事件接入本地工具和 agent
+- 提供 OpenClaw/TG 原图投递集成检查和 skill 同步护栏
 - 结构化配置放在 `configs/config.yaml`，敏感信息放在 `.env`
 
 如果只需要偶尔生成一张图，直接用原生 `codex exec` 就够了。如果需要可重复生成、批量候选、任务追踪或本地集成，可以使用 `codex-imgen`。
@@ -105,7 +106,7 @@ go run ./cmd/skill-sync --apply
 ./imgen doctor openclaw
 ```
 
-该命令只读检查 `image_generate` deny、main agent 的 `message` 暴露、Telegram direct `NO_REPLY` 静默、OpenClaw `message send --force-document` 支持、OpenClaw imgen skill 安装与同步状态，以及同步 CLI JSON 成功判定契约。WARN 行不阻断；FAIL 行表示需要修复配置、OpenClaw CLI 能力或 skill 同步。
+该命令只读检查 `image_generate` deny、main agent 的 `message` 暴露、Telegram direct `NO_REPLY` 静默、OpenClaw `message send --force-document` 支持、OpenClaw imgen skill 安装与同步状态、`IMGEN_DELIVERY_DIR` / `forceDocument` / `asDocument` 调用契约、同步 CLI JSON 成功判定契约，以及本地 `backend.delivery_dir` 是否位于 OpenClaw 可发送根目录。WARN 行不阻断；FAIL 行表示需要修复配置、OpenClaw CLI 能力或 skill 同步。
 
 ## 配置
 
@@ -156,6 +157,8 @@ backend:
   model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
   cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
   timeout: 90s # 单次 Codex/imagegen 调用超时时间
+  delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
+  delivery_max_files: 200 # delivery_dir 非空时最多保留的投递文件数；0 表示不自动清理
   prompt:
     prefix: "$imagegen" # 自动加到 prompt 前面的前缀
     prelude: | # 固定提示词说明，用于统一默认风格和输出约束
@@ -208,6 +211,8 @@ email:
 - `backend.model`：传给 Codex CLI 的模型名；为空时由配置的 Codex backend 使用默认模型。
 - `backend.cwd`：Codex CLI 执行工作目录；为空时使用当前进程工作目录，支持 `~/` 展开。
 - `backend.timeout`：单次 Codex/imagegen 调用超时；生成经常超时时可适当调大。
+- `backend.delivery_dir`：可选投递目录；配置后生成图片会先复制到该目录，再返回复制后的路径。OpenClaw/TG 可指向其允许发送的 workspace/media 目录。
+- `backend.delivery_max_files`：`delivery_dir` 非空时最多保留的投递文件数，默认 `200`；设为 `0` 可关闭自动清理。
 - `backend.prompt.prefix`：自动加到提示词前面的前缀，通常保持 `$imagegen`。
 - `backend.prompt.prelude`：固定提示词说明，用于统一默认风格和输出约束。
 - `email.enabled`：是否启用维护失败邮件通知。
@@ -270,8 +275,9 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 
 1. 在调用前定位配置工作目录：优先使用 `IMGEN_REPO_ROOT`；否则从当前目录向上查找包含 `configs/config.yaml` 且包含 `./imgen`、`build.sh` 或 `go.mod` 的目录；再尝试用户明确提供的安装路径。不要扫描整个文件系统。
 2. 从该目录运行 `./imgen --json ...`，或服务模式下运行 `./imgen get --json <job-id>`。
-3. 同步生成成功必须满足 `ok: true` 且期望数量的 `images[].path` 非空；服务任务完成后从 `images[].path` 读取最终文件。
-4. 如果 Telegram 返回类似 `Media failed`，优先在 Telegram/OpenClaw 所在环境检查 `images[].path` 是否存在、可读、格式有效，并确认两边共享同一文件系统或已复制文件。
+3. OpenClaw/TG 场景建议通过 `IMGEN_DELIVERY_DIR` 或 `backend.delivery_dir` 把图片复制到 OpenClaw 可发送的 workspace/media 目录，并用 `delivery_max_files` 控制投递目录最多保留的文件数。
+4. 同步生成成功必须满足 `ok: true` 且期望数量的 `images[].path` 非空；服务任务完成后从 `images[].path` 读取最终文件。
+5. 如果 Telegram 返回类似 `Media failed`，优先在 Telegram/OpenClaw 所在环境检查 `images[].path` 是否存在、可读、格式有效，并确认两边共享同一文件系统或已复制文件。
 
 对于需要不同主题的 Telegram 多图请求，OpenClaw 应并发运行多条独立的 `./imgen --json --count 1 --concurrency 1` 命令，每条完成后立刻用 `message` 工具发送对应的 `images[].path`，PNG 原图发送应使用 `forceDocument` 或 `asDocument`，直接发完文件后最终只返回 `NO_REPLY`。
 
