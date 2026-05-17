@@ -99,6 +99,11 @@ jobs:
     needs: build
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download release archives
         uses: actions/download-artifact@v8
         with:
@@ -122,8 +127,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          if [[ ! -f "$notes_file" ]]; then
+            printf 'release notes file missing: %s\n' "$notes_file" >&2
+            exit 1
+          fi
+
           if gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GH_REPO" --title "$GITHUB_REF_NAME" --notes-file "$notes_file"
             gh release upload "$GITHUB_REF_NAME" .dist/release/* --repo "$GH_REPO" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" .dist/release/* --repo "$GH_REPO" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+            gh release create "$GITHUB_REF_NAME" .dist/release/* --repo "$GH_REPO" --title "$GITHUB_REF_NAME" --notes-file "$notes_file" --verify-tag
           fi

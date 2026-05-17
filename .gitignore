@@ -41,6 +41,8 @@ nohup.out
 !/.openclaw/skills/imgen/**
 /docs/*
 !/docs/openclaw-imgen-integration.md
+!/docs/releases/
+!/docs/releases/*.md
 /docs/superpowers/
 /CLAUDE.md
 /.superpowers/

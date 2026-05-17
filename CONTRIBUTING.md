@@ -95,3 +95,11 @@ feat: add service status endpoint
 ## Releases
 
 Version tags, release builds, and publishing are performed by maintainers. Contributors should not create release tags unless a maintainer explicitly asks them to do so.
+
+Before tagging a release, create `docs/releases/vX.Y.Z.md`, commit it, and then run:
+
+```bash
+./scripts/tag-release.sh vX.Y.Z
+```
+
+The GitHub Release workflow uses the matching notes file as the release body. `./scripts/tag-release.sh vX.Y.Z --allow-missing-notes` and `ALLOW_MISSING_RELEASE_NOTES=1` are emergency-only escape hatches for maintainers.
