@@ -66,6 +66,12 @@
       "prompt": "./imgen --json 返回 ok=true、顶层 status=completed，但 images[0].status=done 且有 path。OpenClaw 应该判成功还是失败？",
       "expected_output": "Treat this as successful when ok is true and the expected images contain non-empty path values. Do not require per-image status to be completed; synchronous CLI image entries may use status done. Verify the local path exists before delivery, then send that exact path.",
       "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "OpenClaw 要给当前 Telegram 聊天生成一张 PNG Mac 壁纸并直接发回原图。请给可执行调用和回复规则，不要真的生图。",
+      "expected_output": "Set IMGEN_DELIVERY_DIR=\"${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen\" and run ./imgen --json from the discovered repo/config root. Treat success as ok true with non-empty images[].path, allowing images[].status done, send the exact returned local path via OpenClaw message using forceDocument/asDocument for document/original PNG delivery, then reply NO_REPLY. Do not call image_generate, do not fall back to direct codex exec, and do not send stale generated_images paths.",
+      "files": []
     }
   ]
 }

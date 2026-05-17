@@ -108,7 +108,7 @@ func TestOpenClawCheckerFailsWhenSkillMarkersMissing(t *testing.T) {
 func TestOpenClawCheckerFailsWhenSkillMissingSyncJSONContract(t *testing.T) {
 	home := t.TempDir()
 	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
-	writeOpenClawSkill(t, home, "Use ./imgen --json. Deny image_generate. Reply NO_REPLY. Use forceDocument or asDocument.")
+	writeOpenClawSkill(t, home, "Use ./imgen --json with IMGEN_DELIVERY_DIR. Deny image_generate. Reply NO_REPLY. Use forceDocument and asDocument.")
 	checker := checkerWithRepoMirror(t, home, validOpenClawSkillText())
 
 	report, err := checker.Check(context.Background())
@@ -120,6 +120,36 @@ func TestOpenClawCheckerFailsWhenSkillMissingSyncJSONContract(t *testing.T) {
 	}
 	if !reportHas(report, LevelFail, "sync JSON success") {
 		t.Fatalf("expected sync JSON contract marker failure, got:\n%s", report.Render())
+	}
+}
+
+func TestOpenClawCheckerFailsWhenSkillMissingDeliveryDirContract(t *testing.T) {
+	home := t.TempDir()
+	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
+	writeOpenClawSkill(t, home, "Use ./imgen --json. Deny image_generate. Reply NO_REPLY. Use forceDocument and asDocument. Treat synchronous success as ok=true and images[].path; image status can be done.")
+	checker := checkerWithRepoMirror(t, home, validOpenClawSkillText())
+
+	report, err := checker.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !reportHas(report, LevelFail, "IMGEN_DELIVERY_DIR") {
+		t.Fatalf("expected IMGEN_DELIVERY_DIR marker failure, got:\n%s", report.Render())
+	}
+}
+
+func TestOpenClawCheckerRequiresBothDocumentDeliveryMarkers(t *testing.T) {
+	home := t.TempDir()
+	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
+	writeOpenClawSkill(t, home, "Use ./imgen --json with IMGEN_DELIVERY_DIR. Deny image_generate. Reply NO_REPLY. Use forceDocument. Treat synchronous success as ok=true and images[].path; image status can be done.")
+	checker := checkerWithRepoMirror(t, home, validOpenClawSkillText())
+
+	report, err := checker.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !reportHas(report, LevelFail, "asDocument") {
+		t.Fatalf("expected asDocument marker failure, got:\n%s", report.Render())
 	}
 }
 
@@ -135,6 +165,50 @@ func TestOpenClawCheckerFailsWhenSkillUsesGenericImagesAndPathWords(t *testing.T
 	}
 	if !reportHas(report, LevelFail, "sync JSON success") {
 		t.Fatalf("expected sync JSON contract marker failure, got:\n%s", report.Render())
+	}
+}
+
+func TestOpenClawCheckerReportsConfigDeliveryDirUnderAllowedRoot(t *testing.T) {
+	home := t.TempDir()
+	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
+	checker := checkerWithSyncedRepo(t, home)
+	writeImgenConfig(t, checker.RepoRoot, "~/.openclaw/workspace/imgen")
+
+	report, err := checker.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !reportHas(report, LevelOK, "imgen config delivery_dir is under OpenClaw allowed local media root") {
+		t.Fatalf("expected delivery dir OK, got:\n%s", report.Render())
+	}
+}
+
+func TestOpenClawCheckerWarnsWhenConfigDeliveryDirMissing(t *testing.T) {
+	home := t.TempDir()
+	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
+	checker := checkerWithSyncedRepo(t, home)
+
+	report, err := checker.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !reportHas(report, LevelWarn, "imgen config delivery_dir is not configured") {
+		t.Fatalf("expected missing delivery dir warning, got:\n%s", report.Render())
+	}
+}
+
+func TestOpenClawCheckerFailsWhenConfigDeliveryDirOutsideAllowedRoot(t *testing.T) {
+	home := t.TempDir()
+	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
+	checker := checkerWithSyncedRepo(t, home)
+	writeImgenConfig(t, checker.RepoRoot, "~/.codex/generated_images")
+
+	report, err := checker.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !reportHas(report, LevelFail, "imgen config delivery_dir is outside OpenClaw allowed local media roots") {
+		t.Fatalf("expected outside delivery dir failure, got:\n%s", report.Render())
 	}
 }
 
@@ -292,7 +366,7 @@ func checkerWithUnavailableRepo(home string) OpenClawChecker {
 }
 
 func validOpenClawSkillText() string {
-	return "Use ./imgen --json. Deny image_generate. Reply NO_REPLY. Use forceDocument or asDocument. Treat synchronous success as ok=true and images[].path; image status can be done."
+	return "Use ./imgen --json with IMGEN_DELIVERY_DIR. Deny image_generate. Reply NO_REPLY. Use forceDocument and asDocument. Treat synchronous success as ok=true and images[].path; image status can be done."
 }
 
 func validOpenClawConfig(mainTools string) string {
@@ -332,6 +406,18 @@ func writeRepoSkillFile(t *testing.T, repoRoot string, root string, rel string, 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+}
+
+func writeImgenConfig(t *testing.T, repoRoot string, deliveryDir string) {
+	t.Helper()
+	path := filepath.Join(repoRoot, "configs", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	content := "backend:\n  delivery_dir: " + deliveryDir + "\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}

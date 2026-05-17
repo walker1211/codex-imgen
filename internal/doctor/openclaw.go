@@ -132,6 +132,7 @@ func (c OpenClawChecker) Check(ctx context.Context) (Report, error) {
 	checkOpenClawSkill(skillPath, &report)
 	if repoRoot, ok := c.repositoryRoot(&report); ok {
 		checkSkillSync(repoRoot, skillPath, &report)
+		checkImgenConfigDeliveryDir(repoRoot, home, &report)
 	}
 	checkOpenClawCLI(ctx, c, &report)
 
@@ -235,10 +236,12 @@ func checkOpenClawSkill(path string, report *Report) {
 	}
 	text := string(data)
 	missing := missingMarkers(text, map[string][]string{
-		"./imgen --json":           {"./imgen --json"},
-		"image_generate":           {"image_generate"},
-		"NO_REPLY":                 {"NO_REPLY"},
-		"forceDocument/asDocument": {"forceDocument", "asDocument"},
+		"./imgen --json":     {"./imgen --json"},
+		"IMGEN_DELIVERY_DIR": {"IMGEN_DELIVERY_DIR"},
+		"image_generate":     {"image_generate"},
+		"NO_REPLY":           {"NO_REPLY"},
+		"forceDocument":      {"forceDocument"},
+		"asDocument":         {"asDocument"},
 	})
 	if !hasSyncJSONSuccessContract(text) {
 		missing = append(missing, "sync JSON success")
@@ -272,6 +275,92 @@ func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *
 	} else {
 		report.Items = append(report.Items, Item{Level: LevelOK, Message: "installed OpenClaw imgen skill matches Claude source"})
 	}
+}
+
+func checkImgenConfigDeliveryDir(repoRoot string, home string, report *Report) {
+	path := filepath.Join(repoRoot, "configs", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "imgen config delivery_dir is not configured; OpenClaw skill must set IMGEN_DELIVERY_DIR"})
+		return
+	}
+	deliveryDir := configDeliveryDir(string(data))
+	if deliveryDir == "" {
+		report.Items = append(report.Items, Item{Level: LevelWarn, Message: "imgen config delivery_dir is not configured; OpenClaw skill must set IMGEN_DELIVERY_DIR"})
+		return
+	}
+	if deliveryDirUnderAllowedOpenClawRoot(deliveryDir, home) {
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "imgen config delivery_dir is under OpenClaw allowed local media root"})
+		return
+	}
+	report.Items = append(report.Items, Item{Level: LevelFail, Message: "imgen config delivery_dir is outside OpenClaw allowed local media roots"})
+}
+
+func configDeliveryDir(text string) string {
+	inBackend := false
+	backendIndent := 0
+	for _, line := range strings.Split(text, "\n") {
+		content, _, _ := strings.Cut(line, "#")
+		trimmed := strings.TrimSpace(content)
+		if trimmed == "" {
+			continue
+		}
+		indent := len(content) - len(strings.TrimLeft(content, " \t"))
+		if strings.HasPrefix(trimmed, "backend:") {
+			inBackend = true
+			backendIndent = indent
+			continue
+		}
+		if inBackend && indent <= backendIndent {
+			inBackend = false
+		}
+		if !inBackend || !strings.HasPrefix(trimmed, "delivery_dir:") {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(trimmed, "delivery_dir:"))
+		return strings.Trim(value, "\"'")
+	}
+	return ""
+}
+
+func deliveryDirUnderAllowedOpenClawRoot(deliveryDir string, home string) bool {
+	path := expandDoctorHome(deliveryDir, home)
+	allowedRoots := []string{
+		filepath.Join(home, ".openclaw", "workspace"),
+		filepath.Join(home, ".openclaw", "media"),
+	}
+	for _, root := range allowedRoots {
+		if pathUnderRoot(path, root) {
+			return true
+		}
+	}
+	return false
+}
+
+func expandDoctorHome(path string, home string) string {
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+func pathUnderRoot(path string, root string) bool {
+	absPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	absRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func hasSyncJSONSuccessContract(text string) bool {
