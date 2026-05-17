@@ -33,12 +33,13 @@ type SchedulerConfig struct {
 }
 
 type BackendConfig struct {
-	Type    string        `yaml:"type"`
-	Command string        `yaml:"command"`
-	Model   string        `yaml:"model"`
-	CWD     string        `yaml:"cwd"`
-	Timeout time.Duration `yaml:"timeout"`
-	Prompt  PromptConfig  `yaml:"prompt"`
+	Type        string        `yaml:"type"`
+	Command     string        `yaml:"command"`
+	Model       string        `yaml:"model"`
+	CWD         string        `yaml:"cwd"`
+	Timeout     time.Duration `yaml:"timeout"`
+	DeliveryDir string        `yaml:"delivery_dir"`
+	Prompt      PromptConfig  `yaml:"prompt"`
 }
 
 type PromptConfig struct {

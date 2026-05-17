@@ -120,6 +120,37 @@ func TestLoadParsesSchedulerJobConcurrencyFields(t *testing.T) {
 	}
 }
 
+func TestLoadParsesBackendDeliveryDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`backend:
+  delivery_dir: ./openclaw-media
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Backend.DeliveryDir != "./openclaw-media" {
+		t.Fatalf("backend.delivery_dir = %q", cfg.Backend.DeliveryDir)
+	}
+}
+
+func TestLoadReadsDeliveryDirEnv(t *testing.T) {
+	deliveryDir := filepath.Join(t.TempDir(), "media")
+	t.Setenv("IMGEN_DELIVERY_DIR", deliveryDir)
+
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Backend.DeliveryDir != deliveryDir {
+		t.Fatalf("backend.delivery_dir = %q, want %q", cfg.Backend.DeliveryDir, deliveryDir)
+	}
+}
+
 func TestLoadRejectsDeprecatedRealtimeConcurrencyFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`realtime:

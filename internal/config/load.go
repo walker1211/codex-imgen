@@ -34,11 +34,15 @@ func Load(path string) (Config, error) {
 	cfg.Storage.DataDir = expandHome(cfg.Storage.DataDir)
 	cfg.Storage.SQLitePath = expandHome(cfg.Storage.SQLitePath)
 	cfg.Backend.CWD = expandHome(cfg.Backend.CWD)
+	cfg.Backend.DeliveryDir = expandHome(cfg.Backend.DeliveryDir)
 	applyEnv(&cfg)
 	return cfg, nil
 }
 
 func applyEnv(cfg *Config) {
+	if deliveryDir := os.Getenv("IMGEN_DELIVERY_DIR"); deliveryDir != "" {
+		cfg.Backend.DeliveryDir = expandHome(deliveryDir)
+	}
 	cfg.Email.SMTPAuthCode = os.Getenv("EMAIL_SMTP_AUTH_CODE")
 }
 

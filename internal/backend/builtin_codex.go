@@ -2,8 +2,12 @@ package backend
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,12 +21,13 @@ type CommandRunner interface {
 }
 
 type BuiltinCodex struct {
-	Command   string
-	Model     string
-	CWD       string
-	Timeout   time.Duration
-	CodexHome string
-	Runner    CommandRunner
+	Command     string
+	Model       string
+	CWD         string
+	Timeout     time.Duration
+	DeliveryDir string
+	CodexHome   string
+	Runner      CommandRunner
 }
 
 func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
@@ -78,7 +83,43 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 	if req.RecordPhase != nil {
 		req.RecordPhase("parser.completed", time.Now(), "path_len="+strconv.Itoa(len(parsed.Path)))
 	}
-	return GenerateResult{Path: parsed.Path, URI: parsed.URI, RawOutput: result.Stdout + result.Stderr}, nil
+	path := parsed.Path
+	uri := parsed.URI
+	if b.DeliveryDir != "" {
+		path, err = copyImageToDeliveryDir(parsed.Path, b.DeliveryDir)
+		if err != nil {
+			return GenerateResult{}, err
+		}
+		uri = (&url.URL{Scheme: "file", Path: path}).String()
+	}
+	return GenerateResult{Path: path, URI: uri, RawOutput: result.Stdout + result.Stderr}, nil
+}
+
+func copyImageToDeliveryDir(sourcePath string, deliveryDir string) (string, error) {
+	if err := os.MkdirAll(deliveryDir, 0o755); err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	targetPath := filepath.Join(deliveryDir, deliveryFileName(sourcePath))
+	if err := os.WriteFile(targetPath, content, 0o644); err != nil {
+		return "", err
+	}
+	return targetPath, nil
+}
+
+func deliveryFileName(sourcePath string) string {
+	cleanPath := filepath.Clean(sourcePath)
+	base := filepath.Base(cleanPath)
+	parent := filepath.Base(filepath.Dir(cleanPath))
+	sum := sha256.Sum256([]byte(cleanPath))
+	hash := hex.EncodeToString(sum[:4])
+	if parent == "" || parent == "." || parent == string(filepath.Separator) {
+		return hash + "-" + base
+	}
+	return parent + "-" + hash + "-" + base
 }
 
 func (b BuiltinCodex) command() string {

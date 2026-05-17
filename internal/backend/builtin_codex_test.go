@@ -93,6 +93,133 @@ func TestBuiltinCodexGeneratePassesCodexHome(t *testing.T) {
 	}
 }
 
+func TestBuiltinCodexGenerateCopiesImageToDeliveryDir(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, "ig_test.png")
+	if err := os.WriteFile(sourcePath, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	deliveryDir := filepath.Join(t.TempDir(), "openclaw", "workspace", "imgen")
+	backend := BuiltinCodex{
+		Command:     "codex",
+		DeliveryDir: deliveryDir,
+		Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+			return codex.RunResult{Stdout: "Saved to: file://" + sourcePath + "\n"}, nil
+		}),
+	}
+
+	result, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if filepath.Dir(result.Path) != deliveryDir {
+		t.Fatalf("Path dir = %q, want %q", filepath.Dir(result.Path), deliveryDir)
+	}
+	if result.Path == sourcePath {
+		t.Fatalf("Path = source path %q, want copied delivery path", result.Path)
+	}
+	if !strings.HasPrefix(filepath.Base(result.Path), filepath.Base(sourceDir)+"-") || filepath.Ext(result.Path) != ".png" {
+		t.Fatalf("Path = %q, want copied png with source directory prefix", result.Path)
+	}
+	if result.URI != "file://"+result.Path {
+		t.Fatalf("URI = %q, want file URI for %q", result.URI, result.Path)
+	}
+	content, err := os.ReadFile(result.Path)
+	if err != nil {
+		t.Fatalf("ReadFile copied image failed: %v", err)
+	}
+	if string(content) != "png" {
+		t.Fatalf("copied content = %q, want png", content)
+	}
+}
+
+func TestCopyImageToDeliveryDirAvoidsSameBasenameCollisions(t *testing.T) {
+	sourceRoot := t.TempDir()
+	firstSource := filepath.Join(sourceRoot, "thread-a", "image.png")
+	secondSource := filepath.Join(sourceRoot, "thread-b", "image.png")
+	if err := os.MkdirAll(filepath.Dir(firstSource), 0o755); err != nil {
+		t.Fatalf("MkdirAll first failed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(secondSource), 0o755); err != nil {
+		t.Fatalf("MkdirAll second failed: %v", err)
+	}
+	if err := os.WriteFile(firstSource, []byte("first"), 0o644); err != nil {
+		t.Fatalf("WriteFile first failed: %v", err)
+	}
+	if err := os.WriteFile(secondSource, []byte("second"), 0o644); err != nil {
+		t.Fatalf("WriteFile second failed: %v", err)
+	}
+	deliveryDir := t.TempDir()
+
+	firstTarget, err := copyImageToDeliveryDir(firstSource, deliveryDir)
+	if err != nil {
+		t.Fatalf("copy first failed: %v", err)
+	}
+	secondTarget, err := copyImageToDeliveryDir(secondSource, deliveryDir)
+	if err != nil {
+		t.Fatalf("copy second failed: %v", err)
+	}
+
+	if firstTarget == secondTarget {
+		t.Fatalf("targets should differ, both were %q", firstTarget)
+	}
+	firstContent, err := os.ReadFile(firstTarget)
+	if err != nil {
+		t.Fatalf("ReadFile first target failed: %v", err)
+	}
+	secondContent, err := os.ReadFile(secondTarget)
+	if err != nil {
+		t.Fatalf("ReadFile second target failed: %v", err)
+	}
+	if string(firstContent) != "first" || string(secondContent) != "second" {
+		t.Fatalf("copied content = %q/%q, want first/second", firstContent, secondContent)
+	}
+}
+
+func TestCopyImageToDeliveryDirAvoidsSameParentDirectoryCollisions(t *testing.T) {
+	sourceRoot := t.TempDir()
+	firstSource := filepath.Join(sourceRoot, "left", "thread-x", "image.png")
+	secondSource := filepath.Join(sourceRoot, "right", "thread-x", "image.png")
+	if err := os.MkdirAll(filepath.Dir(firstSource), 0o755); err != nil {
+		t.Fatalf("MkdirAll first failed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(secondSource), 0o755); err != nil {
+		t.Fatalf("MkdirAll second failed: %v", err)
+	}
+	if err := os.WriteFile(firstSource, []byte("first"), 0o644); err != nil {
+		t.Fatalf("WriteFile first failed: %v", err)
+	}
+	if err := os.WriteFile(secondSource, []byte("second"), 0o644); err != nil {
+		t.Fatalf("WriteFile second failed: %v", err)
+	}
+	deliveryDir := t.TempDir()
+
+	firstTarget, err := copyImageToDeliveryDir(firstSource, deliveryDir)
+	if err != nil {
+		t.Fatalf("copy first failed: %v", err)
+	}
+	secondTarget, err := copyImageToDeliveryDir(secondSource, deliveryDir)
+	if err != nil {
+		t.Fatalf("copy second failed: %v", err)
+	}
+
+	if firstTarget == secondTarget {
+		t.Fatalf("targets should differ, both were %q", firstTarget)
+	}
+	firstContent, err := os.ReadFile(firstTarget)
+	if err != nil {
+		t.Fatalf("ReadFile first target failed: %v", err)
+	}
+	secondContent, err := os.ReadFile(secondTarget)
+	if err != nil {
+		t.Fatalf("ReadFile second target failed: %v", err)
+	}
+	if string(firstContent) != "first" || string(secondContent) != "second" {
+		t.Fatalf("copied content = %q/%q, want first/second", firstContent, secondContent)
+	}
+}
+
 func TestBuiltinCodexGenerateRecordsParserPhases(t *testing.T) {
 	var phases []string
 	backend := BuiltinCodex{Command: "codex", Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {

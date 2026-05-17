@@ -159,6 +159,7 @@ Important config fields:
 - `backend.command` defaults to `codex` and must be a single executable that accepts `exec --json`.
 - `backend.model` is passed to Codex CLI when set; when empty, the actual model is whatever the backend executable uses by default.
 - `backend.cwd` is passed to Codex CLI as `--cd` when set.
+- `backend.delivery_dir` copies generated images to a caller-visible delivery directory before returning `images[].path`; OpenClaw Telegram can also set `IMGEN_DELIVERY_DIR` per process.
 - `backend.prompt.prefix` normally remains `$imagegen` and is prepended to the prompt text.
 - `email.enabled` enables maintenance failure email notification.
 - `.env` key `EMAIL_SMTP_AUTH_CODE` supplies SMTP auth when email is enabled.
@@ -176,12 +177,12 @@ If `configs/config.yaml` is unavailable, do not invent a model. Say the model de
 OpenClaw should first resolve a config cwd using the discovery rules above. In a normal local checkout, `$HOME/Projects/codex-imgen` maps to the user's repo while avoiding a hardcoded username path. For normal image generation, default to the synchronous CLI route below; do not require `./imgen serve` unless the user needs service job management or realtime streaming. If the resolved root contains an `imgen` executable and `configs/config.yaml`, use this route:
 
 ```bash
-cd <repo-root> && ./imgen --json --count <N> --concurrency 1 "<single-image prompt>"
+cd <repo-root> && IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count <N> --concurrency 1 "<single-image prompt>"
 ```
 
 Use repeated `--image <local-path>` flags before the prompt for image-to-image requests. Do not call OpenClaw's built-in `image_generate` tool. Do not fall back to direct `codex exec --json -- '$imagegen ...'`. Do not reuse old generated image paths unless the user explicitly asks for existing files.
 
-For Telegram delivery after synchronous CLI success, use direct channel delivery when OpenClaw's `message` tool is available: use `action="send"` to the current/original chat and attach each generated local file with the exact `path` or `filePath` returned by imgen. For PNG wallpapers or any image where original quality matters, include `forceDocument: true` or `asDocument: true` so Telegram sends the original file instead of a compressed photo preview. A concise user-facing caption/status message on delivered images is acceptable when useful, then reply only `NO_REPLY` so OpenClaw does not send duplicate text; OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` If the `message` tool is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for the completed image.
+For Telegram delivery after synchronous CLI success, run imgen with `IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen"`, then use direct channel delivery when OpenClaw's `message` tool is available: use `action="send"` to the current/original chat and attach each generated local file with the exact `path` or `filePath` returned by imgen. For PNG wallpapers or any image where original quality matters, include `forceDocument: true` or `asDocument: true` so Telegram sends the original file instead of a compressed photo preview. A concise user-facing caption/status message on delivered images is acceptable when useful, then reply only `NO_REPLY` so OpenClaw does not send duplicate text; OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` If the `message` tool is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for the completed image.
 
 For Telegram multi-image requests, prefer separate one-image commands when distinct themes are useful: run N independent `./imgen --json --count 1 --concurrency 1 "<single-image prompt>"` calls. When the execution tool supports background sessions, launch these independent commands concurrently, keep their session ids, poll all sessions, and send each successful `images[].path` with the `message` tool as soon as that session completes. Do not serialize independent theme generations unless the tool cannot run concurrent sessions. Do not wait for all requested images before sending earlier successes; later generation retries or timeouts must not block already completed images from being delivered.
 
