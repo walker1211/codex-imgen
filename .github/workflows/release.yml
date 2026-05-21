@@ -15,42 +15,6 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Run secret scan
-        run: bash ./scripts/secret-scan.sh --current --history
-
-  build:
-    runs-on: ubuntu-latest
-    needs: preflight
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            artifact_name: codex-imgen_${{ github.ref_name }}_linux_amd64
-          - goos: linux
-            goarch: arm64
-            artifact_name: codex-imgen_${{ github.ref_name }}_linux_arm64
-          - goos: darwin
-            goarch: amd64
-            artifact_name: codex-imgen_${{ github.ref_name }}_darwin_amd64
-          - goos: darwin
-            goarch: arm64
-            artifact_name: codex-imgen_${{ github.ref_name }}_darwin_arm64
-          - goos: windows
-            goarch: amd64
-            artifact_name: codex-imgen_${{ github.ref_name }}_windows_amd64
-          - goos: windows
-            goarch: arm64
-            artifact_name: codex-imgen_${{ github.ref_name }}_windows_arm64
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -62,36 +26,71 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run tests
-        run: go test ./...
+      - name: Local CI
+        run: scripts/ci-local.sh clean
+
+  build:
+    runs-on: ubuntu-latest
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+            ext: ""
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64
+            ext: ".exe"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
       - name: Build release archive
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          ARTIFACT_NAME: ${{ matrix.artifact_name }}
-        shell: bash
+          SUFFIX: ${{ matrix.suffix }}
+          EXT: ${{ matrix.ext }}
         run: |
           set -euo pipefail
-
-          artifact_dir=".dist/${ARTIFACT_NAME}"
-          ext=""
-          if [ "$GOOS" = "windows" ]; then
-            ext=".exe"
-          fi
-
-          mkdir -p "$artifact_dir/configs"
-          GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$artifact_dir/imgen$ext" ./cmd/imgen
-          GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$artifact_dir/skill-sync$ext" ./cmd/skill-sync
-          cp configs/config.example.yaml "$artifact_dir/configs/"
-          cp .example.env README.md README.en.md README.zh-CN.md LICENSE "$artifact_dir/"
-          tar -czf ".dist/${ARTIFACT_NAME}.tar.gz" -C .dist "$ARTIFACT_NAME"
+          package="codex-imgen-${SUFFIX}"
+          mkdir -p "dist/${package}/configs"
+          GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/imgen${EXT}" ./cmd/imgen
+          GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/skill-sync${EXT}" ./cmd/skill-sync
+          cp configs/config.example.yaml "dist/${package}/configs/config.example.yaml"
+          cp .example.env README.md README.en.md README.zh-CN.md LICENSE "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
 
       - name: Upload release archive
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact_name }}
-          path: .dist/${{ matrix.artifact_name }}.tar.gz
+          name: codex-imgen-${{ matrix.suffix }}
+          path: dist/codex-imgen-${{ matrix.suffix }}.tar.gz
           if-no-files-found: error
 
   release:
@@ -107,35 +106,37 @@ jobs:
       - name: Download release archives
         uses: actions/download-artifact@v8
         with:
-          path: .dist/release
+          path: dist
+          merge-multiple: true
 
       - name: Generate checksums
-        shell: bash
         run: |
           set -euo pipefail
+          (cd dist && sha256sum codex-imgen-*.tar.gz > checksums.txt)
 
-          find .dist/release -mindepth 2 -type f -name '*.tar.gz' -exec mv {} .dist/release/ \;
-          find .dist/release -mindepth 1 -type d -empty -delete
-          cd .dist/release
-          sha256sum codex-imgen_*.tar.gz > sha256sums.txt
-
-      - name: Publish GitHub Release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        shell: bash
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-
           notes_file="docs/releases/${GITHUB_REF_NAME}.md"
           if [[ ! -f "$notes_file" ]]; then
             printf 'release notes file missing: %s\n' "$notes_file" >&2
             exit 1
           fi
 
-          if gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --repo "$GH_REPO" --title "$GITHUB_REF_NAME" --notes-file "$notes_file"
-            gh release upload "$GITHUB_REF_NAME" .dist/release/* --repo "$GH_REPO" --clobber
+          if gh release view "${TAG_NAME}" --repo "${GH_REPO}" >/dev/null 2>&1; then
+            gh release edit "${TAG_NAME}" --repo "${GH_REPO}" --title "${TAG_NAME}" --notes-file "$notes_file"
+            gh release view "${TAG_NAME}" --repo "${GH_REPO}" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+              case "$asset" in
+                codex-imgen-darwin-amd64.tar.gz|codex-imgen-darwin-arm64.tar.gz|codex-imgen-linux-amd64.tar.gz|codex-imgen-linux-arm64.tar.gz|codex-imgen-windows-amd64.tar.gz|codex-imgen-windows-arm64.tar.gz|codex-imgen_${TAG_NAME}_darwin_amd64.tar.gz|codex-imgen_${TAG_NAME}_darwin_arm64.tar.gz|codex-imgen_${TAG_NAME}_linux_amd64.tar.gz|codex-imgen_${TAG_NAME}_linux_arm64.tar.gz|codex-imgen_${TAG_NAME}_windows_amd64.tar.gz|codex-imgen_${TAG_NAME}_windows_arm64.tar.gz|checksums.txt|sha256sums.txt)
+                  gh release delete-asset "${TAG_NAME}" "$asset" --repo "${GH_REPO}" --yes
+                  ;;
+              esac
+            done
+            gh release upload "${TAG_NAME}" dist/* --repo "${GH_REPO}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" .dist/release/* --repo "$GH_REPO" --title "$GITHUB_REF_NAME" --notes-file "$notes_file" --verify-tag
+            gh release create "${TAG_NAME}" dist/* --repo "${GH_REPO}" --verify-tag --title "${TAG_NAME}" --notes-file "$notes_file"
           fi
