@@ -40,7 +40,10 @@ nohup.out
 !/.openclaw/skills/imgen/
 !/.openclaw/skills/imgen/**
 /docs/*
+!/docs/
 !/docs/openclaw-imgen-integration.md
+!/docs/assets/
+!/docs/assets/**
 !/docs/releases/
 !/docs/releases/*.md
 /docs/superpowers/

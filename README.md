@@ -21,6 +21,12 @@ If you only need one image once, native `codex exec` is enough. If you need repe
 - YAML configuration for structured settings and `.env` for secrets
 - Go-first implementation that builds into local binaries
 
+## Demo
+
+OpenClaw/TG delivery can send generated images as original files, with captions preserved for each result.
+
+![OpenClaw Telegram original-file delivery demo](./docs/assets/openclaw-telegram-delivery-demo.png)
+
 ## Quick Start
 
 Download the archive for your OS/arch from [GitHub Releases](https://github.com/walker1211/codex-imgen/releases), then run:
