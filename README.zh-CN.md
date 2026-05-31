@@ -75,7 +75,7 @@ bash ./build.sh
 
 ## Skill 同步
 
-仓库内的 `.claude/skills/imgen/` 与 `.openclaw/skills/imgen/` 是 skill 源文件；`~/.claude/skills/imgen/` 与 `~/.openclaw/workspace/skills/imgen/` 是本机安装产物。
+`.claude/skills/imgen/` 是 skill 源文件；`.openclaw/skills/imgen/` 是仓库内 OpenClaw 镜像；`~/.claude/skills/imgen/`、`~/.openclaw/workspace/skills/imgen/` 与 `~/.codex/skills/imgen/` 是本机安装产物。
 
 检查本机安装是否与仓库源文件一致：
 
@@ -83,7 +83,7 @@ bash ./build.sh
 go run ./cmd/skill-sync --check
 ```
 
-把仓库源文件同步到本机 Claude 和 OpenClaw：
+把仓库源文件同步到本机 Claude、OpenClaw 和 Codex，并更新仓库内 OpenClaw 镜像：
 
 ```bash
 go run ./cmd/skill-sync --apply

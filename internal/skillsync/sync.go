@@ -15,9 +15,11 @@ type Paths struct {
 	RepoRoot           string
 	ClaudeInstallDir   string
 	OpenClawInstallDir string
+	CodexInstallDir    string
 
 	claudeInstallParent   string
 	openClawInstallParent string
+	codexInstallParent    string
 }
 
 type Pair struct {
@@ -35,12 +37,15 @@ type Result struct {
 func DefaultPaths(repoRoot string, home string) Paths {
 	claudeInstallParent := filepath.Join(home, ".claude", "skills")
 	openClawInstallParent := filepath.Join(home, ".openclaw", "workspace", "skills")
+	codexInstallParent := filepath.Join(home, ".codex", "skills")
 	return Paths{
 		RepoRoot:              repoRoot,
 		ClaudeInstallDir:      filepath.Join(claudeInstallParent, "imgen"),
 		OpenClawInstallDir:    filepath.Join(openClawInstallParent, "imgen"),
+		CodexInstallDir:       filepath.Join(codexInstallParent, "imgen"),
 		claudeInstallParent:   claudeInstallParent,
 		openClawInstallParent: openClawInstallParent,
+		codexInstallParent:    codexInstallParent,
 	}
 }
 
@@ -52,6 +57,10 @@ func (p Paths) openClawParent() string {
 	return p.openClawInstallParent
 }
 
+func (p Paths) codexParent() string {
+	return p.codexInstallParent
+}
+
 func (p Paths) WithClaudeInstallDir(path string) Paths {
 	p.ClaudeInstallDir = path
 	p.claudeInstallParent = filepath.Dir(filepath.Clean(path))
@@ -61,6 +70,12 @@ func (p Paths) WithClaudeInstallDir(path string) Paths {
 func (p Paths) WithOpenClawInstallDir(path string) Paths {
 	p.OpenClawInstallDir = path
 	p.openClawInstallParent = filepath.Dir(filepath.Clean(path))
+	return p
+}
+
+func (p Paths) WithCodexInstallDir(path string) Paths {
+	p.CodexInstallDir = path
+	p.codexInstallParent = filepath.Dir(filepath.Clean(path))
 	return p
 }
 
@@ -78,6 +93,12 @@ func (p Paths) Pairs() []Pair {
 			SourceDir:      sourceDir,
 			DestinationDir: p.OpenClawInstallDir,
 			InstallParent:  p.openClawParent(),
+		},
+		{
+			Name:           "codex",
+			SourceDir:      sourceDir,
+			DestinationDir: p.CodexInstallDir,
+			InstallParent:  p.codexParent(),
 		},
 	}
 }

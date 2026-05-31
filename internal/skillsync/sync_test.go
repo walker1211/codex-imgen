@@ -16,7 +16,7 @@ func TestCheckReportsMissingInstallTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if len(result.Drift) != 2 {
+	if len(result.Drift) != 3 {
 		t.Fatalf("drift = %v", result.Drift)
 	}
 	if !containsLine(result.Drift, "claude install missing") {
@@ -24,6 +24,9 @@ func TestCheckReportsMissingInstallTargets(t *testing.T) {
 	}
 	if !containsLine(result.Drift, "openclaw install missing") {
 		t.Fatalf("expected missing OpenClaw install, got %v", result.Drift)
+	}
+	if !containsLine(result.Drift, "codex install missing") {
+		t.Fatalf("expected missing Codex install, got %v", result.Drift)
 	}
 }
 
@@ -33,18 +36,23 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	createSourceSkills(t, repoRoot)
 	paths := DefaultPaths(repoRoot, home)
 	writeFile(t, filepath.Join(paths.ClaudeInstallDir, "stale.md"), "old")
+	writeFile(t, filepath.Join(paths.CodexInstallDir, "stale.md"), "old")
 
 	result, err := paths.Apply()
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if len(result.Applied) != 3 {
+	if len(result.Applied) != 4 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
 	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "SKILL.md"), "claude skill")
 	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(paths.CodexInstallDir, "SKILL.md"), "claude skill")
 	if _, err := os.Stat(filepath.Join(paths.ClaudeInstallDir, "stale.md")); !os.IsNotExist(err) {
-		t.Fatalf("expected stale install file to be removed, stat error = %v", err)
+		t.Fatalf("expected stale Claude install file to be removed, stat error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(paths.CodexInstallDir, "stale.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected stale Codex install file to be removed, stat error = %v", err)
 	}
 
 	check, err := paths.Check()
@@ -247,6 +255,25 @@ func TestApplyRejectsDestinationOutsideExpectedSkillParent(t *testing.T) {
 	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "keep.md"), "keep")
 }
 
+func TestApplyRejectsCodexDestinationOutsideExpectedSkillParent(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	outside := t.TempDir()
+	paths := DefaultPaths(repoRoot, home)
+	paths.CodexInstallDir = filepath.Join(outside, "skills", "imgen")
+	writeFile(t, filepath.Join(paths.CodexInstallDir, "keep.md"), "keep")
+
+	_, err := paths.Apply()
+	if err == nil {
+		t.Fatal("expected Apply to reject Codex destination outside expected skill parent")
+	}
+	if !strings.Contains(err.Error(), "outside expected install parent") {
+		t.Fatalf("error = %v", err)
+	}
+	assertFile(t, filepath.Join(paths.CodexInstallDir, "keep.md"), "keep")
+}
+
 func TestApplyRejectsRelativeDestination(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
@@ -269,19 +296,22 @@ func TestApplyAcceptsExplicitInstallDirOverride(t *testing.T) {
 	createSourceSkills(t, repoRoot)
 	claudeParent := filepath.Join(t.TempDir(), "custom-claude", "skills")
 	openClawParent := filepath.Join(t.TempDir(), "custom-openclaw", "skills")
+	codexParent := filepath.Join(t.TempDir(), "custom-codex", "skills")
 	paths := DefaultPaths(repoRoot, home).
 		WithClaudeInstallDir(filepath.Join(claudeParent, "imgen")).
-		WithOpenClawInstallDir(filepath.Join(openClawParent, "imgen"))
+		WithOpenClawInstallDir(filepath.Join(openClawParent, "imgen")).
+		WithCodexInstallDir(filepath.Join(codexParent, "imgen"))
 
 	result, err := paths.Apply()
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if len(result.Applied) != 3 {
+	if len(result.Applied) != 4 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
 	assertFile(t, filepath.Join(claudeParent, "imgen", "SKILL.md"), "claude skill")
 	assertFile(t, filepath.Join(openClawParent, "imgen", "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(codexParent, "imgen", "SKILL.md"), "claude skill")
 }
 
 func TestCheckReportsDestinationSymlinkAsDrift(t *testing.T) {
