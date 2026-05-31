@@ -75,7 +75,7 @@ Note: the binary reads `configs/config.yaml` from the current working directory.
 
 ## Skill Sync
 
-Repository directories `.claude/skills/imgen/` and `.openclaw/skills/imgen/` are the skill sources; `~/.claude/skills/imgen/` and `~/.openclaw/workspace/skills/imgen/` are local install artifacts.
+`.claude/skills/imgen/` is the skill source; `.openclaw/skills/imgen/` is the repository OpenClaw mirror; `~/.claude/skills/imgen/`, `~/.openclaw/workspace/skills/imgen/`, and `~/.codex/skills/imgen/` are local install artifacts.
 
 Check whether local installs match the repository sources:
 
@@ -83,7 +83,7 @@ Check whether local installs match the repository sources:
 go run ./cmd/skill-sync --check
 ```
 
-Copy repository sources into the local Claude and OpenClaw installs:
+Copy repository sources into local Claude, OpenClaw, and Codex installs, and update the repository OpenClaw mirror:
 
 ```bash
 go run ./cmd/skill-sync --apply

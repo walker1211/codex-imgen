@@ -30,6 +30,7 @@ func Run(args []string, ctx CommandContext) int {
 	repoRootFlag := fs.String("repo-root", "", "repository root; defaults to nearest codex-imgen root")
 	claudeDir := fs.String("claude-dir", "", "Claude skill install directory")
 	openClawDir := fs.String("openclaw-dir", "", "OpenClaw workspace skill install directory")
+	codexDir := fs.String("codex-dir", "", "Codex skill install directory")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 2
@@ -77,6 +78,9 @@ func Run(args []string, ctx CommandContext) int {
 	}
 	if *openClawDir != "" {
 		paths = paths.WithOpenClawInstallDir(*openClawDir)
+	}
+	if *codexDir != "" {
+		paths = paths.WithCodexInstallDir(*codexDir)
 	}
 
 	if *apply {
