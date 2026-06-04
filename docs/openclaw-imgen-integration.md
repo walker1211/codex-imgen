@@ -76,7 +76,7 @@ OpenClaw/TG integrations should make the synchronous CLI return paths under a lo
 IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count 1 --concurrency 1 "Theme, single image"
 ```
 
-When using local config, also consider `backend.delivery_max_files` to cap retained delivery files. The default keeps 200 regular files; set it to 0 to disable automatic cleanup.
+When using local config, also consider `backend.delivery_max_files` to cap retained delivery files. The default keeps 200 regular files; set it to 0 to disable automatic cleanup. Set `backend.cleanup_source_thread_dir: true` only when you also want to remove the copied image's source Codex `generated_images/<thread-id>` directory.
 
 ## Execution contract
 

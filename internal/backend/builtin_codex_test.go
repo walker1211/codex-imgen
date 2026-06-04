@@ -134,6 +134,125 @@ func TestBuiltinCodexGenerateCopiesImageToDeliveryDir(t *testing.T) {
 	}
 }
 
+func TestBuiltinCodexGenerateKeepsSourceThreadDirByDefault(t *testing.T) {
+	codexHome := t.TempDir()
+	sourcePath := writeSourceImage(t, codexHome, "thread-default", "ig_test.png", "png")
+	sourceThreadDir := filepath.Dir(sourcePath)
+	deliveryDir := t.TempDir()
+	backend := BuiltinCodex{
+		Command:     "codex",
+		CodexHome:   codexHome,
+		DeliveryDir: deliveryDir,
+		Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+			return codex.RunResult{Stdout: "Saved to: file://" + sourcePath + "\n"}, nil
+		}),
+	}
+
+	result, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Fatalf("delivery image missing: %v", err)
+	}
+	if _, err := os.Stat(sourceThreadDir); err != nil {
+		t.Fatalf("source thread dir should remain by default: %v", err)
+	}
+}
+
+func TestBuiltinCodexGenerateCleansSourceThreadDirWhenEnabled(t *testing.T) {
+	codexHome := t.TempDir()
+	sourcePath := writeSourceImage(t, codexHome, "thread-clean", "ig_test.png", "png")
+	sourceThreadDir := filepath.Dir(sourcePath)
+	generatedImagesDir := filepath.Dir(sourceThreadDir)
+	deliveryDir := t.TempDir()
+	backend := BuiltinCodex{
+		Command:                "codex",
+		CodexHome:              codexHome,
+		DeliveryDir:            deliveryDir,
+		CleanupSourceThreadDir: true,
+		Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+			return codex.RunResult{Stdout: "Saved to: file://" + sourcePath + "\n"}, nil
+		}),
+	}
+
+	result, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Fatalf("delivery image missing: %v", err)
+	}
+	if _, err := os.Stat(sourceThreadDir); !os.IsNotExist(err) {
+		t.Fatalf("source thread dir stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(generatedImagesDir); err != nil {
+		t.Fatalf("generated_images root should remain: %v", err)
+	}
+}
+
+func TestBuiltinCodexGenerateDoesNotCleanupSourceThreadDirWithoutDeliveryDir(t *testing.T) {
+	codexHome := t.TempDir()
+	sourcePath := writeSourceImage(t, codexHome, "thread-no-delivery", "ig_test.png", "png")
+	sourceThreadDir := filepath.Dir(sourcePath)
+	backend := BuiltinCodex{
+		Command:                "codex",
+		CodexHome:              codexHome,
+		CleanupSourceThreadDir: true,
+		Runner: commandRunnerFunc(func(ctx context.Context, req codex.Request) (codex.RunResult, error) {
+			return codex.RunResult{Stdout: "Saved to: file://" + sourcePath + "\n"}, nil
+		}),
+	}
+
+	result, err := backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if result.Path != sourcePath {
+		t.Fatalf("Path = %q, want source path %q", result.Path, sourcePath)
+	}
+	if _, err := os.Stat(sourceThreadDir); err != nil {
+		t.Fatalf("source thread dir should remain without delivery_dir: %v", err)
+	}
+}
+
+func TestCleanupSourceThreadDirIgnoresUnsafePaths(t *testing.T) {
+	codexHome := t.TempDir()
+	generatedImagesDir := filepath.Join(codexHome, "generated_images")
+	if err := os.MkdirAll(generatedImagesDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll generated_images failed: %v", err)
+	}
+	externalDir := t.TempDir()
+	externalPath := filepath.Join(externalDir, "ig_external.png")
+	if err := os.WriteFile(externalPath, []byte("external"), 0o644); err != nil {
+		t.Fatalf("WriteFile external failed: %v", err)
+	}
+	rootImagePath := filepath.Join(generatedImagesDir, "ig_root.png")
+	if err := os.WriteFile(rootImagePath, []byte("root"), 0o644); err != nil {
+		t.Fatalf("WriteFile root image failed: %v", err)
+	}
+	nestedPath := writeSourceImage(t, codexHome, filepath.Join("thread", "nested"), "ig_nested.png", "nested")
+
+	for _, path := range []string{externalPath, rootImagePath, nestedPath} {
+		if err := cleanupSourceThreadDir(path, codexHome); err != nil {
+			t.Fatalf("cleanupSourceThreadDir(%q) returned error: %v", path, err)
+		}
+	}
+
+	if _, err := os.Stat(externalDir); err != nil {
+		t.Fatalf("external dir should remain: %v", err)
+	}
+	if _, err := os.Stat(generatedImagesDir); err != nil {
+		t.Fatalf("generated_images root should remain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(nestedPath)); err != nil {
+		t.Fatalf("nested source dir should remain: %v", err)
+	}
+}
+
 func TestBuiltinCodexGeneratePrunesDeliveryDirToMaxFiles(t *testing.T) {
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, "ig_new.png")
@@ -252,6 +371,18 @@ func TestCopyImageToDeliveryDirAvoidsSameParentDirectoryCollisions(t *testing.T)
 	if string(firstContent) != "first" || string(secondContent) != "second" {
 		t.Fatalf("copied content = %q/%q, want first/second", firstContent, secondContent)
 	}
+}
+
+func writeSourceImage(t *testing.T, codexHome string, threadID string, name string, content string) string {
+	t.Helper()
+	path := filepath.Join(codexHome, "generated_images", threadID, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll source failed: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile source failed: %v", err)
+	}
+	return path
 }
 
 func writeDeliveryFile(t *testing.T, dir string, name string, content string, modTime time.Time) string {

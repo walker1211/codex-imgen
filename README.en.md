@@ -159,6 +159,7 @@ backend:
   timeout: 90s # Timeout for one Codex/imagegen invocation
   delivery_dir: "" # Optional: copy generated images there; OpenClaw/TG can point this at an allowed workspace/media directory
   delivery_max_files: 200 # Max files to retain in delivery_dir when set; 0 disables automatic cleanup
+  cleanup_source_thread_dir: false # When delivery_dir is set and copying succeeds, delete the source Codex generated_images thread directory for this image
   prompt:
     prefix: "$imagegen" # Prefix prepended to every prompt
     prelude: | # Fixed prompt prelude for default style/output constraints
@@ -213,6 +214,7 @@ Configuration fields:
 - `backend.timeout`: timeout for one Codex/imagegen invocation. Increase it if generation frequently times out.
 - `backend.delivery_dir`: optional delivery directory. When set, generated images are copied there and the copied path is returned. OpenClaw/TG can point this at an allowed workspace/media directory.
 - `backend.delivery_max_files`: maximum retained files in `delivery_dir` when set. Defaults to `200`; set `0` to disable automatic cleanup.
+- `backend.cleanup_source_thread_dir`: defaults to `false`; when set to `true`, deletes the source Codex `generated_images/<thread-id>` directory for this image only after `delivery_dir` copying succeeds.
 - `backend.prompt.prefix`: prefix automatically prepended to prompts, usually `$imagegen`.
 - `backend.prompt.prelude`: fixed prompt prelude for default style and output constraints.
 - `email.enabled`: whether to enable maintenance failure email notification.
@@ -275,7 +277,7 @@ Integrations should follow this minimal contract:
 
 1. Resolve the config working directory before calling the CLI: prefer `IMGEN_REPO_ROOT`; otherwise walk upward from the current directory until finding `configs/config.yaml` plus `./imgen`, `build.sh`, or `go.mod`; then try explicit user-provided install paths. Do not scan the whole filesystem.
 2. Run `./imgen --json ...` from that directory, or use `./imgen get --json <job-id>` in service mode.
-3. For OpenClaw/TG, use `IMGEN_DELIVERY_DIR` or `backend.delivery_dir` to copy images into an OpenClaw-sendable workspace/media directory, and use `delivery_max_files` to cap retained delivery files.
+3. For OpenClaw/TG, use `IMGEN_DELIVERY_DIR` or `backend.delivery_dir` to copy images into an OpenClaw-sendable workspace/media directory, and use `delivery_max_files` to cap retained delivery files; explicitly enable `cleanup_source_thread_dir` only when you also want to remove the Codex source thread directory.
 4. Synchronous success requires `ok: true` and non-empty `images[].path` values for the expected images; service jobs expose final files through `images[].path` after completion.
 5. If Telegram reports something like `Media failed`, first check from the Telegram/OpenClaw runtime that `images[].path` exists, is readable, has a valid image format, and is on a shared or copied filesystem.
 
