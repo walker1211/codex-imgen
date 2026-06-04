@@ -33,14 +33,15 @@ type SchedulerConfig struct {
 }
 
 type BackendConfig struct {
-	Type             string        `yaml:"type"`
-	Command          string        `yaml:"command"`
-	Model            string        `yaml:"model"`
-	CWD              string        `yaml:"cwd"`
-	Timeout          time.Duration `yaml:"timeout"`
-	DeliveryDir      string        `yaml:"delivery_dir"`
-	DeliveryMaxFiles int           `yaml:"delivery_max_files"`
-	Prompt           PromptConfig  `yaml:"prompt"`
+	Type                   string        `yaml:"type"`
+	Command                string        `yaml:"command"`
+	Model                  string        `yaml:"model"`
+	CWD                    string        `yaml:"cwd"`
+	Timeout                time.Duration `yaml:"timeout"`
+	DeliveryDir            string        `yaml:"delivery_dir"`
+	DeliveryMaxFiles       int           `yaml:"delivery_max_files"`
+	CleanupSourceThreadDir bool          `yaml:"cleanup_source_thread_dir"`
+	Prompt                 PromptConfig  `yaml:"prompt"`
 }
 
 type PromptConfig struct {

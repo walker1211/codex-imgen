@@ -22,14 +22,15 @@ type CommandRunner interface {
 }
 
 type BuiltinCodex struct {
-	Command          string
-	Model            string
-	CWD              string
-	Timeout          time.Duration
-	DeliveryDir      string
-	DeliveryMaxFiles int
-	CodexHome        string
-	Runner           CommandRunner
+	Command                string
+	Model                  string
+	CWD                    string
+	Timeout                time.Duration
+	DeliveryDir            string
+	DeliveryMaxFiles       int
+	CleanupSourceThreadDir bool
+	CodexHome              string
+	Runner                 CommandRunner
 }
 
 func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
@@ -95,6 +96,11 @@ func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (Genera
 		if err := pruneDeliveryDir(b.DeliveryDir, b.DeliveryMaxFiles); err != nil {
 			return GenerateResult{}, err
 		}
+		if b.CleanupSourceThreadDir {
+			if err := cleanupSourceThreadDir(parsed.Path, b.codexHome()); err != nil {
+				return GenerateResult{}, err
+			}
+		}
 		uri = (&url.URL{Scheme: "file", Path: path}).String()
 	}
 	return GenerateResult{Path: path, URI: uri, RawOutput: result.Stdout + result.Stderr}, nil
@@ -125,6 +131,29 @@ func deliveryFileName(sourcePath string) string {
 		return hash + "-" + base
 	}
 	return parent + "-" + hash + "-" + base
+}
+
+func cleanupSourceThreadDir(sourcePath string, codexHome string) error {
+	generatedImagesDir, err := filepath.Abs(filepath.Join(codexHome, "generated_images"))
+	if err != nil {
+		return err
+	}
+	source, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return err
+	}
+	threadDir := filepath.Clean(filepath.Dir(source))
+	if threadDir == generatedImagesDir || filepath.Dir(threadDir) != generatedImagesDir {
+		return nil
+	}
+	rel, err := filepath.Rel(generatedImagesDir, threadDir)
+	if err != nil || rel == "." || rel == ".." || strings.Contains(rel, string(filepath.Separator)) {
+		return nil
+	}
+	if strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return os.RemoveAll(threadDir)
 }
 
 func pruneDeliveryDir(deliveryDir string, maxFiles int) error {

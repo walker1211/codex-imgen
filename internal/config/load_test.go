@@ -156,6 +156,31 @@ func TestLoadParsesBackendDeliveryMaxFiles(t *testing.T) {
 	}
 }
 
+func TestLoadParsesBackendCleanupSourceThreadDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`backend:
+  cleanup_source_thread_dir: true
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if !cfg.Backend.CleanupSourceThreadDir {
+		t.Fatal("backend.cleanup_source_thread_dir = false, want true")
+	}
+}
+
+func TestDefaultDoesNotCleanupSourceThreadDir(t *testing.T) {
+	cfg := Default()
+	if cfg.Backend.CleanupSourceThreadDir {
+		t.Fatal("backend.cleanup_source_thread_dir = true, want false")
+	}
+}
+
 func TestDefaultLimitsDeliveryDirFiles(t *testing.T) {
 	cfg := Default()
 	if cfg.Backend.DeliveryMaxFiles != 200 {

@@ -159,6 +159,7 @@ backend:
   timeout: 90s # 单次 Codex/imagegen 调用超时时间
   delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
   delivery_max_files: 200 # delivery_dir 非空时最多保留的投递文件数；0 表示不自动清理
+  cleanup_source_thread_dir: false # delivery_dir 非空且复制成功后，是否删除 Codex generated_images 中本次图片所在的 thread 目录
   prompt:
     prefix: "$imagegen" # 自动加到 prompt 前面的前缀
     prelude: | # 固定提示词说明，用于统一默认风格和输出约束
@@ -213,6 +214,7 @@ email:
 - `backend.timeout`：单次 Codex/imagegen 调用超时；生成经常超时时可适当调大。
 - `backend.delivery_dir`：可选投递目录；配置后生成图片会先复制到该目录，再返回复制后的路径。OpenClaw/TG 可指向其允许发送的 workspace/media 目录。
 - `backend.delivery_max_files`：`delivery_dir` 非空时最多保留的投递文件数，默认 `200`；设为 `0` 可关闭自动清理。
+- `backend.cleanup_source_thread_dir`：默认 `false`；设为 `true` 后，仅在 `delivery_dir` 非空且复制成功时删除本次图片所在的 Codex `generated_images/<thread-id>` 原始目录。
 - `backend.prompt.prefix`：自动加到提示词前面的前缀，通常保持 `$imagegen`。
 - `backend.prompt.prelude`：固定提示词说明，用于统一默认风格和输出约束。
 - `email.enabled`：是否启用维护失败邮件通知。
@@ -275,7 +277,7 @@ codex exec --json --image ./1.png -- '$imagegen 保留主体构图和姿态，�
 
 1. 在调用前定位配置工作目录：优先使用 `IMGEN_REPO_ROOT`；否则从当前目录向上查找包含 `configs/config.yaml` 且包含 `./imgen`、`build.sh` 或 `go.mod` 的目录；再尝试用户明确提供的安装路径。不要扫描整个文件系统。
 2. 从该目录运行 `./imgen --json ...`，或服务模式下运行 `./imgen get --json <job-id>`。
-3. OpenClaw/TG 场景建议通过 `IMGEN_DELIVERY_DIR` 或 `backend.delivery_dir` 把图片复制到 OpenClaw 可发送的 workspace/media 目录，并用 `delivery_max_files` 控制投递目录最多保留的文件数。
+3. OpenClaw/TG 场景建议通过 `IMGEN_DELIVERY_DIR` 或 `backend.delivery_dir` 把图片复制到 OpenClaw 可发送的 workspace/media 目录，并用 `delivery_max_files` 控制投递目录最多保留的文件数；需要清理 Codex 原始 thread 目录时再显式开启 `cleanup_source_thread_dir`。
 4. 同步生成成功必须满足 `ok: true` 且期望数量的 `images[].path` 非空；服务任务完成后从 `images[].path` 读取最终文件。
 5. 如果 Telegram 返回类似 `Media failed`，优先在 Telegram/OpenClaw 所在环境检查 `images[].path` 是否存在、可读、格式有效，并确认两边共享同一文件系统或已复制文件。
 

@@ -76,7 +76,7 @@ OpenClaw/TG 集成建议把同步 CLI 的返回路径限制在 OpenClaw 可发�
 IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count 1 --concurrency 1 "主题，单图"
 ```
 
-如果使用本地配置，建议同时设置 `backend.delivery_max_files` 控制投递目录保留文件数。默认保留 200 个普通文件；设为 0 可关闭自动清理。
+如果使用本地配置，建议同时设置 `backend.delivery_max_files` 控制投递目录保留文件数。默认保留 200 个普通文件；设为 0 可关闭自动清理。只有在也希望删除已复制图片对应的 Codex `generated_images/<thread-id>` 原始目录时，才设置 `backend.cleanup_source_thread_dir: true`。
 
 ## 执行契约
 
