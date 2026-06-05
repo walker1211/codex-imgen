@@ -51,7 +51,7 @@ func main() {
 
 	switch cmd.Name {
 	case "run":
-		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
+		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude, MaxAttempts: cfg.Scheduler.MaxAttempts}
 	case "serve":
 		dataDir, dbPath := storagePaths(home, cfg)
 		st := mustOpenStore(dbPath)
@@ -76,7 +76,7 @@ func main() {
 	case "doctor":
 		app.OpenClawDoctor = doctor.NewOpenClawChecker(home)
 	default:
-		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude}
+		app.Engine = cli.LocalEngine{Generator: generator, Prefix: cfg.Backend.Prompt.Prefix, Prelude: cfg.Backend.Prompt.Prelude, MaxAttempts: cfg.Scheduler.MaxAttempts}
 	}
 
 	os.Exit(app.Run(ctx, os.Args[1:]))

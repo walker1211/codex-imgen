@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,12 @@ type recordingGenerator struct {
 	active  int
 	maxSeen int
 	block   chan struct{}
+}
+
+type flakyGenerator struct {
+	mu       sync.Mutex
+	attempts []int
+	failures int
 }
 
 func (g *recordingGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
@@ -37,6 +44,16 @@ func (g *recordingGenerator) Generate(ctx context.Context, req backend.GenerateR
 	idx := len(g.prompts)
 	g.mu.Unlock()
 	return backend.GenerateResult{Path: "/tmp/" + string(rune('0'+idx)) + ".png"}, nil
+}
+
+func (g *flakyGenerator) Generate(ctx context.Context, req backend.GenerateRequest) (backend.GenerateResult, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.attempts = append(g.attempts, req.Attempt)
+	if len(g.attempts) <= g.failures {
+		return backend.GenerateResult{}, errors.New("TooManyRequests")
+	}
+	return backend.GenerateResult{Path: "/tmp/retry-success.png"}, nil
 }
 
 func TestLocalEngineBuildsPromptForEachImage(t *testing.T) {
@@ -95,5 +112,27 @@ func TestLocalEnginePassesImagesToGenerator(t *testing.T) {
 	}
 	if len(gen.images) != 1 || len(gen.images[0]) != 1 || gen.images[0][0] != "/tmp/1.png" {
 		t.Fatalf("images = %v", gen.images)
+	}
+}
+
+func TestLocalEngineRetriesSyncGenerationUpToMaxAttempts(t *testing.T) {
+	gen := &flakyGenerator{failures: 2}
+	engine := LocalEngine{Generator: gen, Prefix: "$imagegen", MaxAttempts: 3, RetryDelays: []time.Duration{0}}
+
+	res, err := engine.RunSync(context.Background(), SyncRequest{Prompt: "draw a dragon", Count: 1, Concurrency: 1})
+	if err != nil {
+		t.Fatalf("RunSync returned error: %v", err)
+	}
+	if len(res.Images) != 1 || res.Images[0].Path != "/tmp/retry-success.png" {
+		t.Fatalf("images = %+v", res.Images)
+	}
+	wantAttempts := []int{1, 2, 3}
+	if len(gen.attempts) != len(wantAttempts) {
+		t.Fatalf("attempts = %#v, want %#v", gen.attempts, wantAttempts)
+	}
+	for i, want := range wantAttempts {
+		if gen.attempts[i] != want {
+			t.Fatalf("attempts = %#v, want %#v", gen.attempts, wantAttempts)
+		}
 	}
 }
