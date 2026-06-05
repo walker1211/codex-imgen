@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +21,14 @@ type ImageResult struct {
 type threadStartedEvent struct {
 	Type     string `json:"type"`
 	ThreadID string `json:"thread_id"`
+}
+
+type itemCompletedEvent struct {
+	Type string `json:"type"`
+	Item struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"item"`
 }
 
 func ExtractImageResult(output string, codexHome string) (ImageResult, error) {
@@ -40,11 +49,38 @@ func ExtractImageResult(output string, codexHome string) (ImageResult, error) {
 
 	if codexHome != "" {
 		if threadID := extractThreadID(lines); threadID != "" {
-			return imageResultFromThreadDirectory(codexHome, threadID)
+			if result, err := imageResultFromThreadDirectory(codexHome, threadID); err == nil {
+				return result, nil
+			}
 		}
 	}
 
+	if message := extractLastAgentMessage(lines); message != "" {
+		return ImageResult{}, fmt.Errorf("%w: %s", ErrImagePathNotFound, message)
+	}
 	return ImageResult{}, ErrImagePathNotFound
+}
+
+func extractLastAgentMessage(lines []string) string {
+	var message string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
+			continue
+		}
+
+		var event itemCompletedEvent
+		if err := json.Unmarshal([]byte(trimmed), &event); err != nil {
+			continue
+		}
+		if event.Type == "item.completed" && event.Item.Type == "agent_message" {
+			text := strings.TrimSpace(event.Item.Text)
+			if text != "" {
+				message = text
+			}
+		}
+	}
+	return message
 }
 
 func extractThreadID(lines []string) string {

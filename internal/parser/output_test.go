@@ -1,8 +1,10 @@
 package parser
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +68,19 @@ func TestExtractImageResultReturnsErrorWhenPathMissing(t *testing.T) {
 
 	if err.Error() != "image path not found in codex output" {
 		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestExtractImageResultIncludesAgentMessageWhenPathMissing(t *testing.T) {
+	output := `{"type":"thread.started","thread_id":"019e9705-aab1-7720-aa88-63ca772101b1"}
+{"type":"item.completed","item":{"type":"agent_message","text":"image_gen returned TooManyRequests; retry later"}}
+`
+
+	_, err := ExtractImageResult(output, t.TempDir())
+	if !errors.Is(err, ErrImagePathNotFound) {
+		t.Fatalf("error = %v, want ErrImagePathNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "TooManyRequests") {
+		t.Fatalf("error = %q, want TooManyRequests detail", err.Error())
 	}
 }
