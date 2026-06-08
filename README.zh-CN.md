@@ -1,6 +1,8 @@
+[English](./README.md)
+
 # codex-imgen
 
-[中文](./README.zh-CN.md) | [English](./README.en.md)
+[English](./README.md)
 
 `codex-imgen` 是一个本地优先的 Go CLI 和异步任务服务，用来把 Codex CLI 内置的 `$imagegen` 能力变成可脚本化、可排队、可查询、可集成的图像生成工作流。
 
