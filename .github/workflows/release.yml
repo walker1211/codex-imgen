@@ -83,7 +83,7 @@ jobs:
           GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/imgen${EXT}" ./cmd/imgen
           GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/skill-sync${EXT}" ./cmd/skill-sync
           cp configs/config.example.yaml "dist/${package}/configs/config.example.yaml"
-          cp .example.env README.md README.en.md README.zh-CN.md LICENSE "dist/${package}/"
+          cp .example.env README.md README.zh-CN.md LICENSE "dist/${package}/"
           tar -C dist -czf "dist/${package}.tar.gz" "${package}"
 
       - name: Upload release archive
