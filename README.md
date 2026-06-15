@@ -34,6 +34,12 @@ If you only need one image once, native `codex exec` is enough. If you need repe
 | Agent/service integration | manual | yes |
 | Local YAML config | no | yes |
 
+## Demo
+
+OpenClaw/TG delivery can send generated images as original files, with captions preserved for each result.
+
+![OpenClaw Telegram original-file delivery demo](./docs/assets/openclaw-telegram-delivery-demo.png)
+
 ## Installation
 
 #### Option 1: Download a release archive

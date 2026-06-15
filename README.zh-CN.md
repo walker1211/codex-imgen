@@ -34,6 +34,12 @@ Codex CLI 本身已经有图像生成能力。`codex-imgen` 关注的是它外�
 | agent/service 集成 | 手动处理 | 支持 |
 | 本地 YAML 配置 | 不支持 | 支持 |
 
+## 演示
+
+OpenClaw/TG 投递可以把生成图片作为原图文件发送，并为每个结果保留 caption。
+
+![OpenClaw Telegram 原图投递演示](./docs/assets/openclaw-telegram-delivery-demo.png)
+
 ## 安装
 
 #### 方式一：下载 Release 归档
