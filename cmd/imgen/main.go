@@ -58,7 +58,7 @@ func main() {
 		defer st.Close()
 		hub := notify.NewWebSocketHub()
 		serveGen := serveGenerator(generator, cfg)
-		svc := &service.Service{Store: st, Generator: serveGen, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
+		svc := &service.Service{Store: st, Generator: serveGen, PromptPrefix: cfg.Backend.Prompt.Prefix, PromptPrelude: cfg.Backend.Prompt.Prelude, DefaultJobConcurrency: cfg.Scheduler.DefaultJobConcurrency, MaxJobConcurrency: cfg.Scheduler.MaxJobConcurrency, MaxCountPerJob: cfg.Scheduler.MaxCountPerJob, ImageInputDir: imageInputDir(dataDir, cfg), MaxAttempts: cfg.Scheduler.MaxAttempts, Publisher: hub}
 		handler := api.NewServerWithOptions(svc, api.ServerOptions{
 			Notifier: hub,
 			Realtime: realtimeOptions(serveGen, cfg),
@@ -72,7 +72,8 @@ func main() {
 		maintenance := scheduler.Maintenance{Store: st, Mailer: notify.NewMailer(cfg.Email), LeaseTimeout: cfg.Scheduler.TaskLeaseTimeout}
 		app.ServerRunner = cli.HTTPServerRunner{Server: server, Maintenance: cli.MaintenanceAdapter{Maintenance: maintenance}, MaintenanceInterval: cfg.Scheduler.MaintenanceInterval}
 	case "submit", "status", "get", "list", "cancel":
-		app.Client = &cli.Client{BaseURL: "http://" + cfg.Server.Listen}
+		dataDir, _ := storagePaths(home, cfg)
+		app.Client = &cli.Client{BaseURL: "http://" + cfg.Server.Listen, ImageInputDir: imageInputDir(dataDir, cfg)}
 	case "doctor":
 		app.OpenClawDoctor = doctor.NewOpenClawChecker(home)
 	default:
@@ -110,6 +111,13 @@ func storagePaths(home string, cfg config.Config) (string, string) {
 		dbPath = filepath.Join(dataDir, "imgen.db")
 	}
 	return dataDir, dbPath
+}
+
+func imageInputDir(dataDir string, cfg config.Config) string {
+	if cfg.Storage.ImageInputDir != "" {
+		return cfg.Storage.ImageInputDir
+	}
+	return filepath.Join(dataDir, "input_images")
 }
 
 func mustOpenStore(dbPath string) *store.Store {

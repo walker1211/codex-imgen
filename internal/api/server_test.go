@@ -107,7 +107,7 @@ func (invalidPromptService) CancelJob(jobID string) error             { return n
 type invalidImageService struct{}
 
 func (invalidImageService) CreateJob(req CreateJobRequest) (CreateJobResult, error) {
-	return CreateJobResult{}, errors.New("image path not found: /tmp/missing.png")
+	return CreateJobResult{}, errors.New("image path not found")
 }
 func (invalidImageService) GetJob(jobID string) (JobStatus, error)   { return JobStatus{}, nil }
 func (invalidImageService) ListJobs(limit int) ([]JobSummary, error) { return nil, nil }

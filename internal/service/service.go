@@ -43,6 +43,7 @@ type Service struct {
 	DefaultJobConcurrency int
 	MaxJobConcurrency     int
 	MaxCountPerJob        int
+	ImageInputDir         string
 	Now                   func() time.Time
 	RetryDelays           []time.Duration
 	MaxAttempts           int
@@ -90,22 +91,39 @@ func (s *Service) publish(event notify.Event) {
 	}
 }
 
-func normalizeImagePaths(paths []string) ([]string, error) {
-	var result []string
-	for _, path := range paths {
-		trimmed := strings.TrimSpace(path)
-		if trimmed == "" {
-			continue
-		}
-		abs, err := filepath.Abs(trimmed)
+func normalizeImagePaths(paths []string, inputDir string) ([]string, error) {
+	root := strings.TrimSpace(inputDir)
+	if root == "" {
+		var err error
+		root, err = os.Getwd()
 		if err != nil {
 			return nil, err
 		}
-		if _, err := os.Stat(abs); err != nil {
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	for _, imagePath := range paths {
+		trimmed := strings.TrimSpace(imagePath)
+		if trimmed == "" {
+			continue
+		}
+		if !filepath.IsLocal(trimmed) {
+			return nil, errors.New("image path must stay within image input directory")
+		}
+		abs := filepath.Join(root, filepath.Clean(trimmed))
+		info, err := os.Stat(abs)
+		if err != nil {
 			if os.IsNotExist(err) {
-				return nil, fmt.Errorf("image path not found: %s", abs)
+				return nil, errors.New("image path not found")
 			}
 			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, errors.New("image path must be a regular file")
 		}
 		result = append(result, abs)
 	}
@@ -141,7 +159,7 @@ func (s *Service) CreateJob(req api.CreateJobRequest) (api.CreateJobResult, erro
 	if strings.TrimSpace(req.Prompt) == "" {
 		return api.CreateJobResult{}, errors.New("prompt is required")
 	}
-	normalizedImages, err := normalizeImagePaths(req.Images)
+	normalizedImages, err := normalizeImagePaths(req.Images, s.ImageInputDir)
 	if err != nil {
 		return api.CreateJobResult{}, err
 	}

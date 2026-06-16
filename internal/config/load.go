@@ -33,6 +33,7 @@ func Load(path string) (Config, error) {
 	}
 	cfg.Storage.DataDir = expandHome(cfg.Storage.DataDir)
 	cfg.Storage.SQLitePath = expandHome(cfg.Storage.SQLitePath)
+	cfg.Storage.ImageInputDir = expandHome(cfg.Storage.ImageInputDir)
 	cfg.Backend.CWD = expandHome(cfg.Backend.CWD)
 	cfg.Backend.DeliveryDir = expandHome(cfg.Backend.DeliveryDir)
 	applyEnv(&cfg)

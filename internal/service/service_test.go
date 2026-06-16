@@ -848,15 +848,11 @@ func waitForServiceQueueTestEntry(t *testing.T, entered <-chan backend.GenerateR
 	}
 }
 
-func TestServiceCreateJobStoresAbsoluteImagePaths(t *testing.T) {
-	img := filepath.Join(t.TempDir(), "1.png")
+func TestServiceCreateJobStoresInputDirImagePaths(t *testing.T) {
+	inputDir := t.TempDir()
+	img := filepath.Join(inputDir, "1.png")
 	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
-	}
-	cwd, _ := os.Getwd()
-	rel, err := filepath.Rel(cwd, img)
-	if err != nil {
-		t.Fatalf("Rel returned error: %v", err)
 	}
 
 	dbPath := filepath.Join(t.TempDir(), "imgen.db")
@@ -866,8 +862,8 @@ func TestServiceCreateJobStoresAbsoluteImagePaths(t *testing.T) {
 	}
 	defer s.Close()
 
-	svc := Service{Store: s}
-	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{rel}})
+	svc := Service{Store: s, ImageInputDir: inputDir}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{"1.png"}})
 	if err != nil {
 		t.Fatalf("CreateJob returned error: %v", err)
 	}
@@ -880,6 +876,28 @@ func TestServiceCreateJobStoresAbsoluteImagePaths(t *testing.T) {
 	}
 }
 
+func TestServiceCreateJobRejectsImagePathOutsideInputDir(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "secret.png")
+	if err := os.WriteFile(outside, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "imgen.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer s.Close()
+
+	svc := Service{Store: s, ImageInputDir: t.TempDir()}
+	_, err = svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{outside}})
+	if err == nil || !strings.Contains(err.Error(), "image path must stay within image input directory") {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), outside) {
+		t.Fatalf("error leaked rejected path: %v", err)
+	}
+}
+
 func TestServiceCreateJobRejectsMissingImagePath(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "imgen.db")
 	s, err := store.Open(dbPath)
@@ -888,15 +906,16 @@ func TestServiceCreateJobRejectsMissingImagePath(t *testing.T) {
 	}
 	defer s.Close()
 
-	svc := Service{Store: s}
-	_, err = svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{"./missing.png"}})
+	svc := Service{Store: s, ImageInputDir: t.TempDir()}
+	_, err = svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{"missing.png"}})
 	if err == nil || !strings.Contains(err.Error(), "image path not found") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestServiceRunJobPassesImagesToGenerator(t *testing.T) {
-	img := filepath.Join(t.TempDir(), "1.png")
+	inputDir := t.TempDir()
+	img := filepath.Join(inputDir, "1.png")
 	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
@@ -907,8 +926,8 @@ func TestServiceRunJobPassesImagesToGenerator(t *testing.T) {
 		t.Fatalf("Open returned error: %v", err)
 	}
 	defer s.Close()
-	svc := Service{Store: s, Generator: gen, PromptPrefix: "$imagegen", RetryDelays: []time.Duration{time.Millisecond}}
-	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{img}})
+	svc := Service{Store: s, Generator: gen, PromptPrefix: "$imagegen", RetryDelays: []time.Duration{time.Millisecond}, ImageInputDir: inputDir}
+	created, err := svc.CreateJob(api.CreateJobRequest{Prompt: "draw a dragon", Images: []string{"1.png"}})
 	if err != nil {
 		t.Fatalf("CreateJob returned error: %v", err)
 	}
