@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +61,29 @@ func TestRealtimeOptionsUsesConfig(t *testing.T) {
 	}
 	if options.MaxSessions != 7 || options.MaxItemsPerSession != 8 || options.MaxCountPerItem != 3 {
 		t.Fatalf("limits = %+v", options)
+	}
+}
+
+func TestImageInputDirDefaultsUnderDataDir(t *testing.T) {
+	cfg := config.Default()
+	dataDir := filepath.Join(t.TempDir(), "data")
+
+	got := imageInputDir(dataDir, cfg)
+
+	want := filepath.Join(dataDir, "input_images")
+	if got != want {
+		t.Fatalf("imageInputDir() = %q, want %q", got, want)
+	}
+}
+
+func TestImageInputDirUsesStorageConfig(t *testing.T) {
+	cfg := config.Default()
+	cfg.Storage.ImageInputDir = filepath.Join(t.TempDir(), "custom-inputs")
+
+	got := imageInputDir(filepath.Join(t.TempDir(), "data"), cfg)
+
+	if got != cfg.Storage.ImageInputDir {
+		t.Fatalf("imageInputDir() = %q, want %q", got, cfg.Storage.ImageInputDir)
 	}
 }
 

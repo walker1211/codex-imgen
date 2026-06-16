@@ -18,8 +18,9 @@ type ServerConfig struct {
 }
 
 type StorageConfig struct {
-	DataDir    string `yaml:"data_dir"`
-	SQLitePath string `yaml:"sqlite_path"`
+	DataDir       string `yaml:"data_dir"`
+	SQLitePath    string `yaml:"sqlite_path"`
+	ImageInputDir string `yaml:"image_input_dir"`
 }
 
 type SchedulerConfig struct {

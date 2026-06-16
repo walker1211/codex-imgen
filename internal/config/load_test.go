@@ -120,6 +120,29 @@ func TestLoadParsesSchedulerJobConcurrencyFields(t *testing.T) {
 	}
 }
 
+func TestLoadParsesStorageImageInputDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`storage:
+  image_input_dir: ~/imgen-inputs
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir returned error: %v", err)
+	}
+	want := filepath.Join(home, "imgen-inputs")
+	if cfg.Storage.ImageInputDir != want {
+		t.Fatalf("storage.image_input_dir = %q, want %q", cfg.Storage.ImageInputDir, want)
+	}
+}
+
 func TestLoadParsesBackendDeliveryDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`backend:

@@ -6,6 +6,7 @@ server:
 storage:
   data_dir: "" # 服务数据目录；为空时使用系统用户数据目录
   sqlite_path: "" # SQLite 数据库路径；为空时使用 data_dir/imgen.db
+  image_input_dir: "" # submit 图片暂存目录；为空时使用 data_dir/input_images
 
 scheduler:
   global_max_concurrency: 10 # serve 内底层生图队列总并发；submit async 和 WebSocket realtime 共用

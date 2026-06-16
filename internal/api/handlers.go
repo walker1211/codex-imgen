@@ -19,7 +19,7 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request, service Service) {
 	if err != nil {
 		status := http.StatusInternalServerError
 		code := "internal_error"
-		if err.Error() == "prompt is required" || strings.HasPrefix(err.Error(), "image path not found:") {
+		if err.Error() == "prompt is required" || strings.HasPrefix(err.Error(), "image path not found") || strings.HasPrefix(err.Error(), "image path must ") {
 			status = http.StatusBadRequest
 			code = "invalid_argument"
 		}
