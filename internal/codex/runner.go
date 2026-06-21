@@ -53,10 +53,15 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 		req.RecordPhase(phase, time.Now(), detail)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return RunResult{}, err
+	}
+
 	record("process.starting", "")
-	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
+	cmd := exec.Command(req.Command, req.Args...)
 	cmd.Dir = req.Dir
 	cmd.Env = envWithCodexHome(req.Env, req.CodexHome)
+	configureCommandProcess(cmd)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -101,8 +106,27 @@ func (Runner) Run(ctx context.Context, req Request) (RunResult, error) {
 		stderrErr = readLines(stderrPipe, &stderr, stderrPhaseRecorder(record))
 	})
 
-	wg.Wait()
-	waitErr := cmd.Wait()
+	pipesDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(pipesDone)
+	}()
+
+	var waitErr error
+	select {
+	case <-pipesDone:
+		waitErr = cmd.Wait()
+	case <-ctx.Done():
+		killErr := killCommandProcess(cmd)
+		waitErr = cmd.Wait()
+		<-pipesDone
+		if killErr != nil && !commandProcessDoneError(killErr) {
+			waitErr = errors.Join(ctx.Err(), killErr)
+		} else {
+			waitErr = ctx.Err()
+		}
+	}
+
 	runCleanups()
 	record("process.exited", "")
 

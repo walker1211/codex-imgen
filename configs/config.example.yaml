@@ -15,14 +15,14 @@ scheduler:
   max_count_per_job: 10 # submit async 单个 job 最多生成多少张图
   maintenance_interval: 5m # 后台维护任务执行间隔
   task_lease_timeout: 30m # 后台任务租约超时时间
-  max_attempts: 3 # submit async 单张图片失败后的最大重试次数
+  max_attempts: 3 # 总尝试次数；3 表示首次尝试加最多两次重试
 
 backend:
   type: built_in_codex # 使用本机 Codex CLI 调用内置 $imagegen
   command: codex # Codex CLI 命令名或可执行文件路径
   model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
   cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
-  timeout: 90s # 单次 Codex/imagegen 调用超时时间
+  timeout: 300s # 单次 Codex/imagegen 调用超时时间
   delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
   delivery_max_files: 200 # delivery_dir 非空时最多保留的投递文件数；0 表示不自动清理
   cleanup_source_thread_dir: false # delivery_dir 非空且复制成功后，是否删除 Codex generated_images 中本次图片所在的 thread 目录

@@ -35,6 +35,9 @@ func TestLoadMissingDefaultPathReturnsDefaults(t *testing.T) {
 	if cfg.Server.Listen != Default().Server.Listen {
 		t.Fatalf("listen = %q", cfg.Server.Listen)
 	}
+	if cfg.Backend.Timeout != 300*time.Second {
+		t.Fatalf("backend.timeout = %s, want 300s", cfg.Backend.Timeout)
+	}
 }
 
 func TestDefaultRealtimeConfig(t *testing.T) {
@@ -296,6 +299,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	}
 	if cfg.Backend.Command != "codex" {
 		t.Fatalf("backend.command = %q", cfg.Backend.Command)
+	}
+	if cfg.Backend.Timeout != 300*time.Second {
+		t.Fatalf("backend.timeout = %s, want 300s", cfg.Backend.Timeout)
 	}
 	if cfg.Backend.Prompt.Prefix != "$imagegen" {
 		t.Fatalf("backend.prompt.prefix = %q", cfg.Backend.Prompt.Prefix)

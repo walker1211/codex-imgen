@@ -109,7 +109,7 @@ func Default() Config {
 		Backend: BackendConfig{
 			Type:             "built_in_codex",
 			Command:          "codex",
-			Timeout:          90 * time.Second,
+			Timeout:          300 * time.Second,
 			DeliveryMaxFiles: 200,
 			Prompt: PromptConfig{
 				Prefix: "$imagegen",
