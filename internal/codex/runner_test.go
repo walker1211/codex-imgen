@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,52 @@ func TestRunnerRunReturnsDeadlineExceededOnTimeout(t *testing.T) {
 	})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+}
+
+func TestRunnerRunDoesNotStartCommandWhenContextCanceled(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "started")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var phases []string
+	_, err := (Runner{}).Run(ctx, Request{
+		Command: "sh",
+		Args:    []string{"-c", "printf started > \"$SENTINEL\""},
+		Env:     []string{"SENTINEL=" + sentinel, "PATH=/bin:/usr/bin"},
+		RecordPhase: func(phase string, occurredAt time.Time, detail string) {
+			phases = append(phases, phase)
+		},
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if len(phases) != 0 {
+		t.Fatalf("expected no process phases because command was not started, got %#v", phases)
+	}
+	if _, statErr := os.Stat(sentinel); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("sentinel file exists or stat failed unexpectedly: %v", statErr)
+	}
+}
+
+func TestRunnerRunTimeoutKillsProcessGroupBeforeWaitingForPipes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process group timeout behavior is Unix-specific")
+	}
+	started := time.Now()
+	_, err := (Runner{}).Run(context.Background(), Request{
+		Command: "sh",
+		Args:    []string{"-c", "sh -c 'sleep 2' & printf 'parent ready\\n'; wait"},
+		Timeout: 50 * time.Millisecond,
+	})
+	elapsed := time.Since(started)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("Run returned after %s, want it to return promptly after timeout", elapsed)
 	}
 }
 
