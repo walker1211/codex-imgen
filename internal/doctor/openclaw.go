@@ -254,7 +254,7 @@ func checkOpenClawSkill(path string, report *Report) {
 }
 
 func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *Report) {
-	sourceDir := filepath.Join(repoRoot, ".agents", "skills", "imgen")
+	sourceDir := skillsync.CanonicalSkillDir(repoRoot)
 	repositoryOpenClawDir := filepath.Join(repoRoot, ".openclaw", "skills", "imgen")
 
 	drift, err := skillsync.CompareSkillTrees(sourceDir, repositoryOpenClawDir, "repository OpenClaw skill mirror")

@@ -36,6 +36,10 @@ type Result struct {
 	Applied []string
 }
 
+func CanonicalSkillDir(repoRoot string) string {
+	return filepath.Join(repoRoot, ".agents", "skills", "imgen")
+}
+
 func DefaultPaths(repoRoot string, home string) Paths {
 	claudeRoot := filepath.Join(home, ".claude")
 	claudeInstallParent := filepath.Join(claudeRoot, "skills")
@@ -94,7 +98,7 @@ func (p Paths) WithCodexInstallDir(path string) Paths {
 }
 
 func (p Paths) Pairs() []Pair {
-	sourceDir := p.agentsSourceDir()
+	sourceDir := CanonicalSkillDir(p.RepoRoot)
 	pairs := []Pair{
 		{
 			Name:           "agents",
@@ -122,17 +126,13 @@ func (p Paths) Pairs() []Pair {
 	return pairs
 }
 
-func (p Paths) agentsSourceDir() string {
-	return filepath.Join(p.RepoRoot, ".agents", "skills", "imgen")
-}
-
 func (p Paths) openClawRepositoryDir() string {
 	return filepath.Join(p.RepoRoot, ".openclaw", "skills", "imgen")
 }
 
 func (p Paths) Check() (Result, error) {
 	var result Result
-	sourceDir := p.agentsSourceDir()
+	sourceDir := CanonicalSkillDir(p.RepoRoot)
 	if err := validateSource(sourceDir); err != nil {
 		return Result{}, fmt.Errorf("agents source invalid: %w", err)
 	}
@@ -155,7 +155,7 @@ func (p Paths) Check() (Result, error) {
 
 func (p Paths) Apply() (Result, error) {
 	var result Result
-	sourceDir := p.agentsSourceDir()
+	sourceDir := CanonicalSkillDir(p.RepoRoot)
 	if err := validateSource(sourceDir); err != nil {
 		return Result{}, fmt.Errorf("agents source invalid: %w", err)
 	}
@@ -191,7 +191,7 @@ func FindRepositoryRoot(cwd string) (string, error) {
 		return "", err
 	}
 	for {
-		hasSkillSource := dirExists(filepath.Join(dir, ".agents", "skills", "imgen"))
+		hasSkillSource := dirExists(CanonicalSkillDir(dir))
 		hasProjectMarker := fileExists(filepath.Join(dir, "go.mod")) ||
 			fileExists(filepath.Join(dir, "configs", "config.example.yaml")) ||
 			fileExists(filepath.Join(dir, "configs", "config.yaml"))

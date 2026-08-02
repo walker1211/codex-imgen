@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestCanonicalSkillDir(t *testing.T) {
+	repoRoot := filepath.Join("testdata", "codex-imgen")
+	want := filepath.Join(repoRoot, ".agents", "skills", "imgen")
+	if got := CanonicalSkillDir(repoRoot); got != want {
+		t.Fatalf("CanonicalSkillDir() = %q, want %q", got, want)
+	}
+}
+
 func TestCheckReportsOnlyAgentsWhenOptionalRuntimesMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
