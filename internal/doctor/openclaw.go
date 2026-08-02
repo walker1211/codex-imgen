@@ -254,7 +254,7 @@ func checkOpenClawSkill(path string, report *Report) {
 }
 
 func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *Report) {
-	sourceDir := filepath.Join(repoRoot, ".claude", "skills", "imgen")
+	sourceDir := filepath.Join(repoRoot, ".agents", "skills", "imgen")
 	repositoryOpenClawDir := filepath.Join(repoRoot, ".openclaw", "skills", "imgen")
 
 	drift, err := skillsync.CompareSkillTrees(sourceDir, repositoryOpenClawDir, "repository OpenClaw skill mirror")
@@ -263,7 +263,7 @@ func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *
 	} else if len(drift) > 0 {
 		report.Items = append(report.Items, Item{Level: LevelFail, Message: "repository OpenClaw skill mirror drift: " + strings.Join(drift, "; ")})
 	} else {
-		report.Items = append(report.Items, Item{Level: LevelOK, Message: "repository OpenClaw skill mirror matches Claude source"})
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "repository OpenClaw skill mirror matches canonical source"})
 	}
 
 	installedOpenClawDir := filepath.Dir(installedOpenClawSkillPath)
@@ -273,7 +273,7 @@ func checkSkillSync(repoRoot string, installedOpenClawSkillPath string, report *
 	} else if len(drift) > 0 {
 		report.Items = append(report.Items, Item{Level: LevelFail, Message: "installed OpenClaw imgen skill drift: " + strings.Join(drift, "; ")})
 	} else {
-		report.Items = append(report.Items, Item{Level: LevelOK, Message: "installed OpenClaw imgen skill matches Claude source"})
+		report.Items = append(report.Items, Item{Level: LevelOK, Message: "installed OpenClaw imgen skill matches canonical source"})
 	}
 }
 

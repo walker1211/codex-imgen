@@ -36,7 +36,7 @@ bash ./build.sh
 
 ## 安装或同步 imgen skill
 
-仓库中的标准 skill 源目录是 `.claude/skills/imgen`。`.openclaw/skills/imgen` 是仓库内 OpenClaw 镜像，本机运行时安装目录由 `skill-sync` 填充。
+仓库中的标准 skill 源目录是 `.agents/skills/imgen`。`.openclaw/skills/imgen` 始终作为仓库内 OpenClaw 镜像维护。只有 `~/.openclaw` 已存在，或显式传入 `--openclaw-dir` 时，才会同步本机 OpenClaw；Claude 以同样逻辑检查 `~/.claude` 和 `--claude-dir`。
 
 ```bash
 go run ./cmd/skill-sync --check

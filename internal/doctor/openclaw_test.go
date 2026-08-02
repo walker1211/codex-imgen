@@ -31,10 +31,10 @@ func TestOpenClawCheckerReportsOKAndWarn(t *testing.T) {
 	if !reportHas(report, LevelWarn, "active-memory targets main") {
 		t.Fatalf("expected active-memory warning, got:\n%s", report.Render())
 	}
-	if !reportHas(report, LevelOK, "repository OpenClaw skill mirror matches Claude source") {
+	if !reportHas(report, LevelOK, "repository OpenClaw skill mirror matches canonical source") {
 		t.Fatalf("expected repository sync OK, got:\n%s", report.Render())
 	}
-	if !reportHas(report, LevelOK, "installed OpenClaw imgen skill matches Claude source") {
+	if !reportHas(report, LevelOK, "installed OpenClaw imgen skill matches canonical source") {
 		t.Fatalf("expected installed sync OK, got:\n%s", report.Render())
 	}
 	if !strings.HasPrefix(report.Render(), "OpenClaw doctor\n") {
@@ -224,7 +224,7 @@ func TestOpenClawCheckerReportsMessageSendForceDocumentSupport(t *testing.T) {
 	if !reportHas(report, LevelOK, "openclaw CLI message send supports --force-document") {
 		t.Fatalf("expected force-document OK, got:\n%s", report.Render())
 	}
-	if !reportHas(report, LevelOK, "installed OpenClaw imgen skill matches Claude source") {
+	if !reportHas(report, LevelOK, "installed OpenClaw imgen skill matches canonical source") {
 		t.Fatalf("expected installed sync OK, got:\n%s", report.Render())
 	}
 }
@@ -234,7 +234,7 @@ func TestOpenClawCheckerReportsRepositorySkillMirrorDrift(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
 	writeOpenClawSkill(t, home, validOpenClawSkillText())
-	writeRepoSkillFile(t, repoRoot, ".claude", "SKILL.md", validOpenClawSkillText())
+	writeRepoSkillFile(t, repoRoot, ".agents", "SKILL.md", validOpenClawSkillText())
 	writeRepoSkillFile(t, repoRoot, ".openclaw", "SKILL.md", "changed")
 	checker := checkerWithOpenClawSupport(home)
 	checker.RepoRoot = repoRoot
@@ -253,7 +253,7 @@ func TestOpenClawCheckerReportsInstalledOpenClawSkillDrift(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeOpenClawConfig(t, home, validOpenClawConfig(`"alsoAllow": ["message"]`))
 	writeOpenClawSkill(t, home, "changed installed skill")
-	writeRepoSkillFile(t, repoRoot, ".claude", "SKILL.md", validOpenClawSkillText())
+	writeRepoSkillFile(t, repoRoot, ".agents", "SKILL.md", validOpenClawSkillText())
 	writeRepoSkillFile(t, repoRoot, ".openclaw", "SKILL.md", validOpenClawSkillText())
 	checker := checkerWithOpenClawSupport(home)
 	checker.RepoRoot = repoRoot
@@ -302,7 +302,7 @@ func TestOpenClawCheckerWarnsWhenOpenClawCLIMissing(t *testing.T) {
 	if !reportHas(report, LevelWarn, "openclaw CLI not found on PATH") {
 		t.Fatalf("expected CLI warning, got:\n%s", report.Render())
 	}
-	if !reportHas(report, LevelOK, "repository OpenClaw skill mirror matches Claude source") {
+	if !reportHas(report, LevelOK, "repository OpenClaw skill mirror matches canonical source") {
 		t.Fatalf("expected repository sync OK, got:\n%s", report.Render())
 	}
 }
@@ -350,7 +350,7 @@ func checkerWithSyncedRepo(t *testing.T, home string) OpenClawChecker {
 func checkerWithRepoMirror(t *testing.T, home string, sourceSkill string) OpenClawChecker {
 	t.Helper()
 	repoRoot := t.TempDir()
-	writeRepoSkillFile(t, repoRoot, ".claude", "SKILL.md", sourceSkill)
+	writeRepoSkillFile(t, repoRoot, ".agents", "SKILL.md", sourceSkill)
 	writeRepoSkillFile(t, repoRoot, ".openclaw", "SKILL.md", sourceSkill)
 	checker := checkerWithOpenClawSupport(home)
 	checker.RepoRoot = repoRoot

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCheckReportsMissingInstallTargets(t *testing.T) {
+func TestCheckReportsOnlyAgentsWhenOptionalRuntimesMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
@@ -16,17 +16,63 @@ func TestCheckReportsMissingInstallTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if len(result.Drift) != 3 {
+	if len(result.Drift) != 1 {
+		t.Fatalf("drift = %v", result.Drift)
+	}
+	if containsLine(result.Drift, "claude") {
+		t.Fatalf("expected Claude to be skipped, got %v", result.Drift)
+	}
+	if containsLine(result.Drift, "openclaw") {
+		t.Fatalf("expected OpenClaw to be skipped, got %v", result.Drift)
+	}
+	if !containsLine(result.Drift, "agents install missing") {
+		t.Fatalf("expected missing Agents install, got %v", result.Drift)
+	}
+}
+
+func TestCheckReportsMissingClaudeWhenClaudeDirectoryExists(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+
+	result, err := DefaultPaths(repoRoot, home).Check()
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if len(result.Drift) != 2 {
 		t.Fatalf("drift = %v", result.Drift)
 	}
 	if !containsLine(result.Drift, "claude install missing") {
 		t.Fatalf("expected missing Claude install, got %v", result.Drift)
 	}
+	if containsLine(result.Drift, "openclaw") {
+		t.Fatalf("expected OpenClaw to be skipped, got %v", result.Drift)
+	}
+}
+
+func TestCheckReportsMissingOpenClawWhenOpenClawDirectoryExists(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	if err := os.MkdirAll(filepath.Join(home, ".openclaw"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+
+	result, err := DefaultPaths(repoRoot, home).Check()
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if len(result.Drift) != 2 {
+		t.Fatalf("drift = %v", result.Drift)
+	}
 	if !containsLine(result.Drift, "openclaw install missing") {
 		t.Fatalf("expected missing OpenClaw install, got %v", result.Drift)
 	}
-	if !containsLine(result.Drift, "codex install missing") {
-		t.Fatalf("expected missing Codex install, got %v", result.Drift)
+	if containsLine(result.Drift, "claude") {
+		t.Fatalf("expected Claude to be skipped, got %v", result.Drift)
 	}
 }
 
@@ -34,9 +80,15 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".openclaw"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
 	paths := DefaultPaths(repoRoot, home)
 	writeFile(t, filepath.Join(paths.ClaudeInstallDir, "stale.md"), "old")
-	writeFile(t, filepath.Join(paths.CodexInstallDir, "stale.md"), "old")
+	writeFile(t, filepath.Join(paths.AgentsInstallDir, "stale.md"), "old")
 
 	result, err := paths.Apply()
 	if err != nil {
@@ -45,14 +97,14 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	if len(result.Applied) != 4 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
-	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(paths.CodexInstallDir, "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "SKILL.md"), "agents skill")
+	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "agents skill")
+	assertFile(t, filepath.Join(paths.AgentsInstallDir, "SKILL.md"), "agents skill")
 	if _, err := os.Stat(filepath.Join(paths.ClaudeInstallDir, "stale.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected stale Claude install file to be removed, stat error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(paths.CodexInstallDir, "stale.md")); !os.IsNotExist(err) {
-		t.Fatalf("expected stale Codex install file to be removed, stat error = %v", err)
+	if _, err := os.Stat(filepath.Join(paths.AgentsInstallDir, "stale.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected stale Agents install file to be removed, stat error = %v", err)
 	}
 
 	check, err := paths.Check()
@@ -64,10 +116,35 @@ func TestApplyCopiesSourcesAndRemovesStaleFiles(t *testing.T) {
 	}
 }
 
-func TestApplySyncsRepositoryOpenClawFromClaudeSource(t *testing.T) {
+func TestApplySkipsOptionalRuntimesWhenDirectoriesMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
+	paths := DefaultPaths(repoRoot, home)
+
+	result, err := paths.Apply()
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if len(result.Applied) != 2 {
+		t.Fatalf("applied = %v", result.Applied)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Fatalf("Claude directory stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".openclaw")); !os.IsNotExist(err) {
+		t.Fatalf("OpenClaw directory stat error = %v, want not exist", err)
+	}
+	assertFile(t, filepath.Join(paths.AgentsInstallDir, "SKILL.md"), "agents skill")
+}
+
+func TestApplySyncsRepositoryOpenClawFromAgentsSource(t *testing.T) {
+	repoRoot := t.TempDir()
+	home := t.TempDir()
+	createSourceSkills(t, repoRoot)
+	if err := os.MkdirAll(filepath.Join(home, ".openclaw"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
 	paths := DefaultPaths(repoRoot, home)
 	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "stale openclaw skill")
 
@@ -78,8 +155,8 @@ func TestApplySyncsRepositoryOpenClawFromClaudeSource(t *testing.T) {
 	if !containsLine(result.Applied, filepath.Join(repoRoot, ".openclaw", "skills", "imgen")) {
 		t.Fatalf("expected repository openclaw skill to be applied, got %v", result.Applied)
 	}
-	assertFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "agents skill")
+	assertFile(t, filepath.Join(paths.OpenClawInstallDir, "SKILL.md"), "agents skill")
 }
 
 func TestCheckReportsChangedTargetFile(t *testing.T) {
@@ -90,13 +167,13 @@ func TestCheckReportsChangedTargetFile(t *testing.T) {
 	if _, err := paths.Apply(); err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	writeFile(t, filepath.Join(paths.ClaudeInstallDir, "SKILL.md"), "changed")
+	writeFile(t, filepath.Join(paths.AgentsInstallDir, "SKILL.md"), "changed")
 
 	result, err := paths.Check()
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "claude file differs: SKILL.md") {
+	if !containsLine(result.Drift, "agents file differs: SKILL.md") {
 		t.Fatalf("expected changed file drift, got %v", result.Drift)
 	}
 }
@@ -219,19 +296,19 @@ func TestCheckReportsMissingAndExtraInstallFiles(t *testing.T) {
 	if _, err := paths.Apply(); err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if err := os.Remove(filepath.Join(paths.ClaudeInstallDir, "references", "imgen-usage.md")); err != nil {
+	if err := os.Remove(filepath.Join(paths.AgentsInstallDir, "references", "imgen-usage.md")); err != nil {
 		t.Fatalf("Remove returned error: %v", err)
 	}
-	writeFile(t, filepath.Join(paths.ClaudeInstallDir, "extra.md"), "extra")
+	writeFile(t, filepath.Join(paths.AgentsInstallDir, "extra.md"), "extra")
 
 	result, err := paths.Check()
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "claude file missing: references/imgen-usage.md") {
+	if !containsLine(result.Drift, "agents file missing: references/imgen-usage.md") {
 		t.Fatalf("expected missing file drift, got %v", result.Drift)
 	}
-	if !containsLine(result.Drift, "claude extra install file: extra.md") {
+	if !containsLine(result.Drift, "agents extra install file: extra.md") {
 		t.Fatalf("expected extra file drift, got %v", result.Drift)
 	}
 }
@@ -240,6 +317,9 @@ func TestApplyRejectsDestinationOutsideExpectedSkillParent(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
 	outside := t.TempDir()
 	paths := DefaultPaths(repoRoot, home)
 	paths.ClaudeInstallDir = filepath.Join(outside, "skills", "imgen")
@@ -255,23 +335,23 @@ func TestApplyRejectsDestinationOutsideExpectedSkillParent(t *testing.T) {
 	assertFile(t, filepath.Join(paths.ClaudeInstallDir, "keep.md"), "keep")
 }
 
-func TestApplyRejectsCodexDestinationOutsideExpectedSkillParent(t *testing.T) {
+func TestApplyRejectsAgentsDestinationOutsideExpectedSkillParent(t *testing.T) {
 	repoRoot := t.TempDir()
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
 	outside := t.TempDir()
 	paths := DefaultPaths(repoRoot, home)
-	paths.CodexInstallDir = filepath.Join(outside, "skills", "imgen")
-	writeFile(t, filepath.Join(paths.CodexInstallDir, "keep.md"), "keep")
+	paths.AgentsInstallDir = filepath.Join(outside, "skills", "imgen")
+	writeFile(t, filepath.Join(paths.AgentsInstallDir, "keep.md"), "keep")
 
 	_, err := paths.Apply()
 	if err == nil {
-		t.Fatal("expected Apply to reject Codex destination outside expected skill parent")
+		t.Fatal("expected Apply to reject Agents destination outside expected skill parent")
 	}
 	if !strings.Contains(err.Error(), "outside expected install parent") {
 		t.Fatalf("error = %v", err)
 	}
-	assertFile(t, filepath.Join(paths.CodexInstallDir, "keep.md"), "keep")
+	assertFile(t, filepath.Join(paths.AgentsInstallDir, "keep.md"), "keep")
 }
 
 func TestApplyRejectsRelativeDestination(t *testing.T) {
@@ -279,7 +359,7 @@ func TestApplyRejectsRelativeDestination(t *testing.T) {
 	home := t.TempDir()
 	createSourceSkills(t, repoRoot)
 	paths := DefaultPaths(repoRoot, home)
-	paths.ClaudeInstallDir = filepath.Join("relative", "skills", "imgen")
+	paths.AgentsInstallDir = filepath.Join("relative", "skills", "imgen")
 
 	_, err := paths.Apply()
 	if err == nil {
@@ -296,11 +376,11 @@ func TestApplyAcceptsExplicitInstallDirOverride(t *testing.T) {
 	createSourceSkills(t, repoRoot)
 	claudeParent := filepath.Join(t.TempDir(), "custom-claude", "skills")
 	openClawParent := filepath.Join(t.TempDir(), "custom-openclaw", "skills")
-	codexParent := filepath.Join(t.TempDir(), "custom-codex", "skills")
+	agentsParent := filepath.Join(t.TempDir(), "custom-agents", "skills")
 	paths := DefaultPaths(repoRoot, home).
 		WithClaudeInstallDir(filepath.Join(claudeParent, "imgen")).
 		WithOpenClawInstallDir(filepath.Join(openClawParent, "imgen")).
-		WithCodexInstallDir(filepath.Join(codexParent, "imgen"))
+		WithAgentsInstallDir(filepath.Join(agentsParent, "imgen"))
 
 	result, err := paths.Apply()
 	if err != nil {
@@ -309,9 +389,9 @@ func TestApplyAcceptsExplicitInstallDirOverride(t *testing.T) {
 	if len(result.Applied) != 4 {
 		t.Fatalf("applied = %v", result.Applied)
 	}
-	assertFile(t, filepath.Join(claudeParent, "imgen", "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(openClawParent, "imgen", "SKILL.md"), "claude skill")
-	assertFile(t, filepath.Join(codexParent, "imgen", "SKILL.md"), "claude skill")
+	assertFile(t, filepath.Join(claudeParent, "imgen", "SKILL.md"), "agents skill")
+	assertFile(t, filepath.Join(openClawParent, "imgen", "SKILL.md"), "agents skill")
+	assertFile(t, filepath.Join(agentsParent, "imgen", "SKILL.md"), "agents skill")
 }
 
 func TestCheckReportsDestinationSymlinkAsDrift(t *testing.T) {
@@ -322,12 +402,12 @@ func TestCheckReportsDestinationSymlinkAsDrift(t *testing.T) {
 	if _, err := paths.Apply(); err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if err := os.Remove(filepath.Join(paths.ClaudeInstallDir, "SKILL.md")); err != nil {
+	if err := os.Remove(filepath.Join(paths.AgentsInstallDir, "SKILL.md")); err != nil {
 		t.Fatalf("Remove returned error: %v", err)
 	}
 	outside := filepath.Join(t.TempDir(), "outside.md")
 	writeFile(t, outside, "outside")
-	if err := os.Symlink(outside, filepath.Join(paths.ClaudeInstallDir, "SKILL.md")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(paths.AgentsInstallDir, "SKILL.md")); err != nil {
 		t.Fatalf("Symlink returned error: %v", err)
 	}
 
@@ -335,7 +415,7 @@ func TestCheckReportsDestinationSymlinkAsDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if !containsLine(result.Drift, "claude file is symlink: SKILL.md") {
+	if !containsLine(result.Drift, "agents file is symlink: SKILL.md") {
 		t.Fatalf("expected destination symlink drift, got %v", result.Drift)
 	}
 }
@@ -346,7 +426,7 @@ func TestApplyRejectsSourceSymlink(t *testing.T) {
 	createSourceSkills(t, repoRoot)
 	outside := filepath.Join(t.TempDir(), "secret.txt")
 	writeFile(t, outside, "secret")
-	link := filepath.Join(repoRoot, ".claude", "skills", "imgen", "linked-secret.txt")
+	link := filepath.Join(repoRoot, ".agents", "skills", "imgen", "linked-secret.txt")
 	if err := os.Symlink(outside, link); err != nil {
 		t.Fatalf("Symlink returned error: %v", err)
 	}
@@ -378,12 +458,44 @@ func TestFindRepositoryRoot(t *testing.T) {
 	}
 }
 
+func TestFindRepositoryRootFromReleaseLayout(t *testing.T) {
+	for _, configName := range []string{"config.example.yaml", "config.yaml"} {
+		t.Run(configName, func(t *testing.T) {
+			repoRoot := t.TempDir()
+			createSourceSkills(t, repoRoot)
+			writeFile(t, filepath.Join(repoRoot, "configs", configName), "backend: {}\n")
+			nested := filepath.Join(repoRoot, "configs")
+
+			found, err := FindRepositoryRoot(nested)
+			if err != nil {
+				t.Fatalf("FindRepositoryRoot returned error: %v", err)
+			}
+			if found != repoRoot {
+				t.Fatalf("found = %q, want %q", found, repoRoot)
+			}
+		})
+	}
+}
+
+func TestFindRepositoryRootRejectsPersonalAgentsInstall(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".agents", "skills", "imgen", "SKILL.md"), "agents skill")
+	nested := filepath.Join(home, "Projects", "example")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+
+	if _, err := FindRepositoryRoot(nested); err == nil {
+		t.Fatal("expected personal Agents install without a project marker to be rejected")
+	}
+}
+
 func createSourceSkills(t *testing.T, repoRoot string) {
 	t.Helper()
-	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "SKILL.md"), "claude skill")
-	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "references", "imgen-usage.md"), "usage")
-	writeFile(t, filepath.Join(repoRoot, ".claude", "skills", "imgen", "evals", "evals.json"), "{}")
-	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "claude skill")
+	writeFile(t, filepath.Join(repoRoot, ".agents", "skills", "imgen", "SKILL.md"), "agents skill")
+	writeFile(t, filepath.Join(repoRoot, ".agents", "skills", "imgen", "references", "imgen-usage.md"), "usage")
+	writeFile(t, filepath.Join(repoRoot, ".agents", "skills", "imgen", "evals", "evals.json"), "{}")
+	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "SKILL.md"), "agents skill")
 	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "references", "imgen-usage.md"), "usage")
 	writeFile(t, filepath.Join(repoRoot, ".openclaw", "skills", "imgen", "evals", "evals.json"), "{}")
 }
