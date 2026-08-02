@@ -1,6 +1,6 @@
 ---
 name: imgen
-description: Use this skill whenever the user wants to use codex-imgen, imgen, Codex CLI $imagegen, text-to-image, image-to-image, local asynchronous image generation jobs, image job troubleshooting, or OpenClaw integration for local image generation. This skill helps choose the right imgen command or service flow, ask only necessary questions, keep secrets and config in the right files, and produce safe platform-neutral CLI/service guidance when another agent such as OpenClaw will call imgen.
+description: "Default image workflow for this user. Use for ordinary raster image generation or editing, text-to-image, image-to-image, codex-imgen/imgen CLI or service jobs, imgen troubleshooting, and OpenClaw integration. Prefer imgen over the system imagegen skill. Do not use for SVG/vector/code-native assets that are better edited directly."
 ---
 
 # imgen

@@ -57,7 +57,7 @@ cp .example.env .env
 
 Windows 下运行 `imgen.exe --help`。
 
-Release 归档包含 `imgen`、`skill-sync` 二进制，`configs/config.example.yaml`、`.example.env`、README 文件和 `LICENSE`。
+Release 归档包含 `imgen`、`skill-sync` 二进制、`.agents/skills/imgen`、`.openclaw/skills/imgen`、`configs/config.example.yaml`、`.example.env`、README 文件和 `LICENSE`。
 
 #### 方式二：从源码构建
 
@@ -81,7 +81,7 @@ bash ./build.sh
 
 ## Skill 同步
 
-`.claude/skills/imgen/` 是 skill 源文件；`.openclaw/skills/imgen/` 是仓库内 OpenClaw 镜像；`~/.claude/skills/imgen/`、`~/.openclaw/workspace/skills/imgen/` 与 `~/.codex/skills/imgen/` 是本机安装产物。
+`.agents/skills/imgen/` 是标准 skill 源目录，`.openclaw/skills/imgen/` 是仓库内 OpenClaw 镜像。`skill-sync` 始终管理 `~/.agents/skills/imgen/`。仅当 `~/.openclaw/` 已存在时才管理 `~/.openclaw/workspace/skills/imgen/`，仅当 `~/.claude/` 已存在时才管理 `~/.claude/skills/imgen/`；缺失的可选运行时目录会被跳过，也不会被创建。
 
 检查本机安装是否与仓库源文件一致：
 
@@ -89,7 +89,7 @@ bash ./build.sh
 go run ./cmd/skill-sync --check
 ```
 
-把仓库源文件同步到本机 Claude、OpenClaw 和 Codex，并更新仓库内 OpenClaw 镜像：
+把仓库源文件同步到已启用的本机安装目录，并更新仓库内 OpenClaw 镜像：
 
 ```bash
 go run ./cmd/skill-sync --apply
@@ -103,6 +103,8 @@ go run ./cmd/skill-sync --apply
 ```
 
 默认只检查漂移；只有显式传入 `--apply` 时才会覆盖本机 skill 安装目录。
+
+可以使用 `--agents-dir`、`--openclaw-dir` 或 `--claude-dir` 覆盖对应安装目录。即使默认根目录不存在，显式传入 `--openclaw-dir` 或 `--claude-dir` 也会启用对应运行时同步。原来的 `--codex-dir` 仍作为 `--agents-dir` 的兼容别名保留。
 
 ## OpenClaw doctor
 

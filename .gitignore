@@ -30,10 +30,11 @@ nohup.out
 
 # Local/private project assets
 /.claude/*
-!/.claude/skills/
-/.claude/skills/*
-!/.claude/skills/imgen/
-!/.claude/skills/imgen/**
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/imgen/
+!/.agents/skills/imgen/**
 /.openclaw/*
 !/.openclaw/skills/
 /.openclaw/skills/*

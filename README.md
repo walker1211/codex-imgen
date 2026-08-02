@@ -57,7 +57,7 @@ cp .example.env .env
 
 On Windows, run `imgen.exe --help`.
 
-Release archives include the `imgen` and `skill-sync` binaries, `configs/config.example.yaml`, `.example.env`, README files, and `LICENSE`.
+Release archives include the `imgen` and `skill-sync` binaries, `.agents/skills/imgen`, `.openclaw/skills/imgen`, `configs/config.example.yaml`, `.example.env`, README files, and `LICENSE`.
 
 #### Option 2: Build from source
 
@@ -81,7 +81,7 @@ Note: the binary reads `configs/config.yaml` from the current working directory.
 
 ## Skill Sync
 
-`.claude/skills/imgen/` is the skill source; `.openclaw/skills/imgen/` is the repository OpenClaw mirror; `~/.claude/skills/imgen/`, `~/.openclaw/workspace/skills/imgen/`, and `~/.codex/skills/imgen/` are local install artifacts.
+`.agents/skills/imgen/` is the canonical skill source, and `.openclaw/skills/imgen/` is the repository OpenClaw mirror. `skill-sync` always manages `~/.agents/skills/imgen/`. It manages `~/.openclaw/workspace/skills/imgen/` only when `~/.openclaw/` already exists, and `~/.claude/skills/imgen/` only when `~/.claude/` already exists. Missing optional runtime directories are skipped and are not created.
 
 Check whether local installs match the repository sources:
 
@@ -89,7 +89,7 @@ Check whether local installs match the repository sources:
 go run ./cmd/skill-sync --check
 ```
 
-Copy repository sources into local Claude, OpenClaw, and Codex installs, and update the repository OpenClaw mirror:
+Copy the repository source into the enabled local installs and update the repository OpenClaw mirror:
 
 ```bash
 go run ./cmd/skill-sync --apply
@@ -103,6 +103,8 @@ You can also build first with `bash ./build.sh` and then use the local binary:
 ```
 
 The default behavior is drift checking only; local skill install directories are overwritten only when `--apply` is passed explicitly.
+
+Use `--agents-dir`, `--openclaw-dir`, or `--claude-dir` to override an install directory. An explicit `--openclaw-dir` or `--claude-dir` enables that runtime sync even when its default root does not exist. The former `--codex-dir` option remains available as a compatibility alias for `--agents-dir`.
 
 ## OpenClaw doctor
 

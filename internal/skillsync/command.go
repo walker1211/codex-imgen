@@ -1,6 +1,7 @@
 package skillsync
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -24,15 +25,21 @@ func Run(args []string, ctx CommandContext) int {
 	}
 
 	fs := flag.NewFlagSet("skill-sync", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stderr)
 	apply := fs.Bool("apply", false, "copy repository skill sources to local installs")
 	check := fs.Bool("check", false, "check whether local installs match repository skill sources")
 	repoRootFlag := fs.String("repo-root", "", "repository root; defaults to nearest codex-imgen root")
-	claudeDir := fs.String("claude-dir", "", "Claude skill install directory")
-	openClawDir := fs.String("openclaw-dir", "", "OpenClaw workspace skill install directory")
-	codexDir := fs.String("codex-dir", "", "Codex skill install directory")
+	claudeDir := fs.String("claude-dir", "", "Claude skill install directory; enables Claude sync")
+	openClawDir := fs.String("openclaw-dir", "", "OpenClaw workspace skill install directory; enables OpenClaw sync")
+	agentsDir := fs.String("agents-dir", "", "Agents skill install directory")
+	codexDir := fs.String("codex-dir", "", "deprecated alias for --agents-dir")
+	if len(args) == 1 && args[0] == "help" {
+		args = []string{"--help"}
+	}
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if fs.NArg() != 0 {
@@ -41,6 +48,10 @@ func Run(args []string, ctx CommandContext) int {
 	}
 	if *apply && *check {
 		fmt.Fprintln(stderr, "choose either --check or --apply")
+		return 2
+	}
+	if *agentsDir != "" && *codexDir != "" {
+		fmt.Fprintln(stderr, "choose either --agents-dir or --codex-dir")
 		return 2
 	}
 
@@ -79,8 +90,12 @@ func Run(args []string, ctx CommandContext) int {
 	if *openClawDir != "" {
 		paths = paths.WithOpenClawInstallDir(*openClawDir)
 	}
-	if *codexDir != "" {
-		paths = paths.WithCodexInstallDir(*codexDir)
+	agentsInstallDir := *agentsDir
+	if agentsInstallDir == "" {
+		agentsInstallDir = *codexDir
+	}
+	if agentsInstallDir != "" {
+		paths = paths.WithAgentsInstallDir(agentsInstallDir)
 	}
 
 	if *apply {

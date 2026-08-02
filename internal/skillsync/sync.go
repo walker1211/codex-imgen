@@ -15,11 +15,13 @@ type Paths struct {
 	RepoRoot           string
 	ClaudeInstallDir   string
 	OpenClawInstallDir string
-	CodexInstallDir    string
+	AgentsInstallDir   string
 
 	claudeInstallParent   string
 	openClawInstallParent string
-	codexInstallParent    string
+	agentsInstallParent   string
+	syncClaude            bool
+	syncOpenClaw          bool
 }
 
 type Pair struct {
@@ -35,17 +37,21 @@ type Result struct {
 }
 
 func DefaultPaths(repoRoot string, home string) Paths {
-	claudeInstallParent := filepath.Join(home, ".claude", "skills")
-	openClawInstallParent := filepath.Join(home, ".openclaw", "workspace", "skills")
-	codexInstallParent := filepath.Join(home, ".codex", "skills")
+	claudeRoot := filepath.Join(home, ".claude")
+	claudeInstallParent := filepath.Join(claudeRoot, "skills")
+	openClawRoot := filepath.Join(home, ".openclaw")
+	openClawInstallParent := filepath.Join(openClawRoot, "workspace", "skills")
+	agentsInstallParent := filepath.Join(home, ".agents", "skills")
 	return Paths{
 		RepoRoot:              repoRoot,
 		ClaudeInstallDir:      filepath.Join(claudeInstallParent, "imgen"),
 		OpenClawInstallDir:    filepath.Join(openClawInstallParent, "imgen"),
-		CodexInstallDir:       filepath.Join(codexInstallParent, "imgen"),
+		AgentsInstallDir:      filepath.Join(agentsInstallParent, "imgen"),
 		claudeInstallParent:   claudeInstallParent,
 		openClawInstallParent: openClawInstallParent,
-		codexInstallParent:    codexInstallParent,
+		agentsInstallParent:   agentsInstallParent,
+		syncClaude:            dirExists(claudeRoot),
+		syncOpenClaw:          dirExists(openClawRoot),
 	}
 }
 
@@ -57,54 +63,67 @@ func (p Paths) openClawParent() string {
 	return p.openClawInstallParent
 }
 
-func (p Paths) codexParent() string {
-	return p.codexInstallParent
+func (p Paths) agentsParent() string {
+	return p.agentsInstallParent
 }
 
 func (p Paths) WithClaudeInstallDir(path string) Paths {
 	p.ClaudeInstallDir = path
 	p.claudeInstallParent = filepath.Dir(filepath.Clean(path))
+	p.syncClaude = true
 	return p
 }
 
 func (p Paths) WithOpenClawInstallDir(path string) Paths {
 	p.OpenClawInstallDir = path
 	p.openClawInstallParent = filepath.Dir(filepath.Clean(path))
+	p.syncOpenClaw = true
 	return p
 }
 
-func (p Paths) WithCodexInstallDir(path string) Paths {
-	p.CodexInstallDir = path
-	p.codexInstallParent = filepath.Dir(filepath.Clean(path))
+func (p Paths) WithAgentsInstallDir(path string) Paths {
+	p.AgentsInstallDir = path
+	p.agentsInstallParent = filepath.Dir(filepath.Clean(path))
 	return p
+}
+
+// WithCodexInstallDir is kept as a compatibility alias for callers that used
+// the previous Codex-specific name before personal skills moved to .agents.
+func (p Paths) WithCodexInstallDir(path string) Paths {
+	return p.WithAgentsInstallDir(path)
 }
 
 func (p Paths) Pairs() []Pair {
-	sourceDir := p.claudeSourceDir()
-	return []Pair{
+	sourceDir := p.agentsSourceDir()
+	pairs := []Pair{
 		{
-			Name:           "claude",
+			Name:           "agents",
 			SourceDir:      sourceDir,
-			DestinationDir: p.ClaudeInstallDir,
-			InstallParent:  p.claudeParent(),
+			DestinationDir: p.AgentsInstallDir,
+			InstallParent:  p.agentsParent(),
 		},
-		{
+	}
+	if p.syncOpenClaw {
+		pairs = append(pairs, Pair{
 			Name:           "openclaw",
 			SourceDir:      sourceDir,
 			DestinationDir: p.OpenClawInstallDir,
 			InstallParent:  p.openClawParent(),
-		},
-		{
-			Name:           "codex",
-			SourceDir:      sourceDir,
-			DestinationDir: p.CodexInstallDir,
-			InstallParent:  p.codexParent(),
-		},
+		})
 	}
+	if p.syncClaude {
+		pairs = append(pairs, Pair{
+			Name:           "claude",
+			SourceDir:      sourceDir,
+			DestinationDir: p.ClaudeInstallDir,
+			InstallParent:  p.claudeParent(),
+		})
+	}
+	return pairs
 }
 
-func (p Paths) claudeSourceDir() string {
-	return filepath.Join(p.RepoRoot, ".claude", "skills", "imgen")
+func (p Paths) agentsSourceDir() string {
+	return filepath.Join(p.RepoRoot, ".agents", "skills", "imgen")
 }
 
 func (p Paths) openClawRepositoryDir() string {
@@ -113,9 +132,9 @@ func (p Paths) openClawRepositoryDir() string {
 
 func (p Paths) Check() (Result, error) {
 	var result Result
-	sourceDir := p.claudeSourceDir()
+	sourceDir := p.agentsSourceDir()
 	if err := validateSource(sourceDir); err != nil {
-		return Result{}, fmt.Errorf("claude source invalid: %w", err)
+		return Result{}, fmt.Errorf("agents source invalid: %w", err)
 	}
 	pairs := p.Pairs()
 	for _, pair := range pairs {
@@ -136,9 +155,9 @@ func (p Paths) Check() (Result, error) {
 
 func (p Paths) Apply() (Result, error) {
 	var result Result
-	sourceDir := p.claudeSourceDir()
+	sourceDir := p.agentsSourceDir()
 	if err := validateSource(sourceDir); err != nil {
-		return Result{}, fmt.Errorf("claude source invalid: %w", err)
+		return Result{}, fmt.Errorf("agents source invalid: %w", err)
 	}
 	pairs := p.Pairs()
 	for _, pair := range pairs {
@@ -172,7 +191,11 @@ func FindRepositoryRoot(cwd string) (string, error) {
 		return "", err
 	}
 	for {
-		if fileExists(filepath.Join(dir, "go.mod")) && dirExists(filepath.Join(dir, ".claude", "skills", "imgen")) {
+		hasSkillSource := dirExists(filepath.Join(dir, ".agents", "skills", "imgen"))
+		hasProjectMarker := fileExists(filepath.Join(dir, "go.mod")) ||
+			fileExists(filepath.Join(dir, "configs", "config.example.yaml")) ||
+			fileExists(filepath.Join(dir, "configs", "config.yaml"))
+		if hasSkillSource && hasProjectMarker {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)

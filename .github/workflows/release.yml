@@ -79,11 +79,15 @@ jobs:
         run: |
           set -euo pipefail
           package="codex-imgen-${SUFFIX}"
-          mkdir -p "dist/${package}/configs"
+          mkdir -p "dist/${package}/configs" "dist/${package}/.agents/skills" "dist/${package}/.openclaw/skills"
           GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/imgen${EXT}" ./cmd/imgen
           GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/skill-sync${EXT}" ./cmd/skill-sync
           cp configs/config.example.yaml "dist/${package}/configs/config.example.yaml"
+          cp -R .agents/skills/imgen "dist/${package}/.agents/skills/"
+          cp -R .openclaw/skills/imgen "dist/${package}/.openclaw/skills/"
           cp .example.env README.md README.zh-CN.md LICENSE "dist/${package}/"
+          test -f "dist/${package}/.agents/skills/imgen/SKILL.md"
+          test -f "dist/${package}/.openclaw/skills/imgen/SKILL.md"
           tar -C dist -czf "dist/${package}.tar.gz" "${package}"
 
       - name: Upload release archive

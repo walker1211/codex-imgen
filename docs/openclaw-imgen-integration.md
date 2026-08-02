@@ -36,7 +36,7 @@ Treat generation as successful only when the JSON output has `ok: true` and the 
 
 ## Install or sync the imgen skill
 
-The canonical skill source in this repository is `.claude/skills/imgen`. The `.openclaw/skills/imgen` tree is a repository mirror, and local runtime installs are populated by `skill-sync`.
+The canonical skill source in this repository is `.agents/skills/imgen`. The `.openclaw/skills/imgen` tree is always maintained as a repository mirror. The local OpenClaw install is included only when `~/.openclaw` exists or `--openclaw-dir` is supplied explicitly; Claude follows the same rule with `~/.claude` and `--claude-dir`.
 
 ```bash
 go run ./cmd/skill-sync --check
