@@ -83,6 +83,16 @@ func TestBuiltinCodexGenerateBuildsExecArgsWithImages(t *testing.T) {
 	}
 }
 
+func TestBuiltinCodexGenerateBuildsExecArgsWithReasoningEffort(t *testing.T) {
+	runner := &recordingRunner{}
+	backend := BuiltinCodex{Command: "codex", Model: "gpt-5.6-terra", ReasoningEffort: "high", Runner: runner}
+	_, _ = backend.Generate(context.Background(), GenerateRequest{Prompt: "$imagegen draw a dragon"})
+	want := []string{"exec", "--json", "--config", `model_reasoning_effort="high"`, "--model", "gpt-5.6-terra", "--", "$imagegen draw a dragon"}
+	if !reflect.DeepEqual(runner.req.Args, want) {
+		t.Fatalf("args = %#v, want %#v", runner.req.Args, want)
+	}
+}
+
 func TestBuiltinCodexGeneratePassesCodexHome(t *testing.T) {
 	runner := &recordingRunner{}
 	codexHome := t.TempDir()

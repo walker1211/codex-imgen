@@ -112,7 +112,7 @@ Poll all sessions and send each successful `images[].path` as soon as that sessi
 - If Telegram says `Media failed`, check from the OpenClaw runtime that the generated path exists, is readable, and is on a shared or copied filesystem.
 - If Telegram downloads a JPG/photo preview instead of the PNG original, verify that the `message` call used `forceDocument: true` or `asDocument: true`.
 - If a final visible message like `No extra answer from me.` appears after files are delivered, allow direct `NO_REPLY` silence in OpenClaw and ensure the final assistant reply is exactly `NO_REPLY`.
-- If no image paths are returned, inspect `configs/config.yaml` for `backend.command`, `backend.model`, and `backend.cwd`, and confirm the configured backend supports Codex `exec --json`.
+- If no image paths are returned, inspect `configs/config.yaml` for `backend.command`, `backend.model`, `backend.reasoning_effort`, and `backend.cwd`, and confirm the configured backend supports Codex `exec --json` and the selected model supports the configured effort.
 
 ## OpenClaw active-memory embedded run warning
 

@@ -112,7 +112,7 @@ final reply: NO_REPLY
 - 如果 Telegram 返回 `Media failed`，从 OpenClaw 运行环境检查生成路径是否存在、可读，并确认文件系统共享或文件已复制到可访问位置。
 - 如果 Telegram 下载的是 JPG/photo 预览而不是 PNG 原图，确认 `message` 调用使用了 `forceDocument: true` 或 `asDocument: true`。
 - 如果文件已发送后又出现 `No extra answer from me.` 之类最终可见消息，应允许 OpenClaw direct `NO_REPLY` 静默，并确认最终 assistant 回复严格等于 `NO_REPLY`。
-- 如果没有返回图片路径，检查 `configs/config.yaml` 中的 `backend.command`、`backend.model` 和 `backend.cwd`，并确认配置的 backend 支持 Codex `exec --json`。
+- 如果没有返回图片路径，检查 `configs/config.yaml` 中的 `backend.command`、`backend.model`、`backend.reasoning_effort` 和 `backend.cwd`，并确认配置的 backend 支持 Codex `exec --json`、所选模型支持当前 effort。
 
 ## OpenClaw active-memory 嵌入运行 warning
 

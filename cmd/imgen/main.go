@@ -39,6 +39,7 @@ func main() {
 	generator := backend.BuiltinCodex{
 		Command:                cfg.Backend.Command,
 		Model:                  cfg.Backend.Model,
+		ReasoningEffort:        cfg.Backend.ReasoningEffort,
 		CWD:                    cfg.Backend.CWD,
 		Timeout:                cfg.Backend.Timeout,
 		DeliveryDir:            cfg.Backend.DeliveryDir,

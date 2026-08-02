@@ -164,6 +164,24 @@ func TestLoadParsesBackendDeliveryDir(t *testing.T) {
 	}
 }
 
+func TestLoadParsesBackendReasoningEffort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`backend:
+  reasoning_effort: high
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Backend.ReasoningEffort != "high" {
+		t.Fatalf("backend.reasoning_effort = %q", cfg.Backend.ReasoningEffort)
+	}
+}
+
 func TestLoadParsesBackendDeliveryMaxFiles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`backend:
@@ -299,6 +317,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	}
 	if cfg.Backend.Command != "codex" {
 		t.Fatalf("backend.command = %q", cfg.Backend.Command)
+	}
+	if cfg.Backend.ReasoningEffort != "" {
+		t.Fatalf("backend.reasoning_effort = %q, want empty", cfg.Backend.ReasoningEffort)
 	}
 	if cfg.Backend.Timeout != 300*time.Second {
 		t.Fatalf("backend.timeout = %s, want 300s", cfg.Backend.Timeout)
