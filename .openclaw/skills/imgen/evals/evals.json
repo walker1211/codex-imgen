@@ -72,6 +72,12 @@
       "prompt": "OpenClaw 要给当前 Telegram 聊天生成一张 PNG Mac 壁纸并直接发回原图。请给可执行调用和回复规则，不要真的生图。",
       "expected_output": "Set IMGEN_DELIVERY_DIR=\"${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen\" and run ./imgen --json from the discovered repo/config root. Treat success as ok true with non-empty images[].path, allowing images[].status done, send the exact returned local path via OpenClaw message using forceDocument/asDocument for document/original PNG delivery, then reply NO_REPLY. Do not call image_generate, do not fall back to direct codex exec, and do not send stale generated_images paths.",
       "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "本地 configs/config.yaml 配了 backend.model: gpt-5.6-terra 和 backend.reasoning_effort: high，但 ~/.codex/config.toml 是 model_reasoning_effort = \"max\"。imgen 实际用哪个 effort？skill 会不会再覆盖一次？",
+      "expected_output": "Inspect the local imgen config and explain that non-empty backend.reasoning_effort is passed as a per-invocation Codex override, so high overrides the global max for imgen calls. If backend.reasoning_effort is empty, imgen inherits the Codex CLI setting. State that the skill itself does not set or override model/effort, and that backend.model selects the Codex agent invoking imagegen rather than directly naming the image-generation model.",
+      "files": []
     }
   ]
 }
