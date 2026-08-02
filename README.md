@@ -161,6 +161,7 @@ backend:
   type: built_in_codex # Use local Codex CLI with the built-in $imagegen skill
   command: codex # Codex CLI command name or executable path
   model: "" # Empty uses the Codex CLI default model; set this only when pinning a model
+  reasoning_effort: "" # Empty inherits Codex CLI config; set a level supported by the selected model
   cwd: "" # Codex CLI working directory; empty uses the current process directory
   timeout: 90s # Timeout for one Codex/imagegen invocation
   delivery_dir: "" # Optional: copy generated images there; OpenClaw/TG can point this at an allowed workspace/media directory
@@ -216,6 +217,7 @@ Configuration fields:
 - `backend.type`: generation backend type. Currently use `built_in_codex`.
 - `backend.command`: Codex CLI command. Defaults to `codex`; the built-in backend currently requires this command to support `exec --json`.
 - `backend.model`: model name passed to Codex CLI. If empty, the configured Codex backend chooses its default model.
+- `backend.reasoning_effort`: optional Codex reasoning effort passed as a per-invocation config override. If empty, the Codex CLI configuration is inherited; supported values depend on the selected model.
 - `backend.cwd`: Codex CLI working directory. If empty, the current process working directory is used. `~/` is expanded.
 - `backend.timeout`: timeout for one Codex/imagegen invocation. Increase it if generation frequently times out.
 - `backend.delivery_dir`: optional delivery directory. When set, generated images are copied there and the copied path is returned. OpenClaw/TG can point this at an allowed workspace/media directory.
@@ -263,7 +265,7 @@ Notes:
 
 - Only local file paths are supported in this version. URLs and uploads are not supported.
 - Synchronous `run` and asynchronous `submit` use the same `--image` semantics.
-- The backend invokes Codex CLI as `<backend.command> exec --json --image ... -- '<prompt>'`.
+- The backend invokes Codex CLI as `<backend.command> exec --json [--config model_reasoning_effort=...] --image ... -- '<prompt>'`.
 - The `--` separator is required for the native Codex CLI command because variadic `--image` would otherwise consume the prompt.
 - Wrappers such as `ccs codex` are not automatically compatible; if `ccs codex exec --json` reports `unknown option '--json'`, the current built-in backend cannot use it directly.
 

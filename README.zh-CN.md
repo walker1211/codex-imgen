@@ -161,6 +161,7 @@ backend:
   type: built_in_codex # 使用本机 Codex CLI 调用内置 $imagegen
   command: codex # Codex CLI 命令名或可执行文件路径
   model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
+  reasoning_effort: "" # 为空时继承 Codex CLI 配置；填写所选模型支持的档位
   cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
   timeout: 90s # 单次 Codex/imagegen 调用超时时间
   delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
@@ -216,6 +217,7 @@ email:
 - `backend.type`：生成后端类型；当前使用 `built_in_codex`。
 - `backend.command`：Codex CLI 命令，默认 `codex`；当前内置 backend 要求该命令支持 `exec --json`。
 - `backend.model`：传给 Codex CLI 的模型名；为空时由配置的 Codex backend 使用默认模型。
+- `backend.reasoning_effort`：可选的 Codex 推理档位，以单次调用配置覆盖的方式传入；为空时继承 Codex CLI 配置，具体支持值取决于所选模型。
 - `backend.cwd`：Codex CLI 执行工作目录；为空时使用当前进程工作目录，支持 `~/` 展开。
 - `backend.timeout`：单次 Codex/imagegen 调用超时；生成经常超时时可适当调大。
 - `backend.delivery_dir`：可选投递目录；配置后生成图片会先复制到该目录，再返回复制后的路径。OpenClaw/TG 可指向其允许发送的 workspace/media 目录。
@@ -263,7 +265,7 @@ email:
 
 - 当前只支持本机文件路径，不支持 URL 或上传文件。
 - 同步 `run` 与异步 `submit` 的 `--image` 参数语义一致。
-- backend 调用 Codex CLI 时会生成 `<backend.command> exec --json --image ... -- '<prompt>'`。
+- backend 调用 Codex CLI 时会生成 `<backend.command> exec --json [--config model_reasoning_effort=...] --image ... -- '<prompt>'`。
 - `--` 分隔符对原生 Codex CLI 是必需的，否则 variadic `--image` 会吞掉 prompt。
 - `ccs codex` 等包装命令不一定兼容；如果 `ccs codex exec --json` 报 `unknown option '--json'`，当前内置 backend 不能直接使用它。
 

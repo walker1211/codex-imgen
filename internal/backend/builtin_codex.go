@@ -24,6 +24,7 @@ type CommandRunner interface {
 type BuiltinCodex struct {
 	Command                string
 	Model                  string
+	ReasoningEffort        string
 	CWD                    string
 	Timeout                time.Duration
 	DeliveryDir            string
@@ -35,6 +36,9 @@ type BuiltinCodex struct {
 
 func (b BuiltinCodex) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
 	args := []string{"exec", "--json"}
+	if b.ReasoningEffort != "" {
+		args = append(args, "--config", "model_reasoning_effort="+strconv.Quote(b.ReasoningEffort))
+	}
 	model := req.Model
 	if model == "" {
 		model = b.Model

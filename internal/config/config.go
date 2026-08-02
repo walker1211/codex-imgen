@@ -37,6 +37,7 @@ type BackendConfig struct {
 	Type                   string        `yaml:"type"`
 	Command                string        `yaml:"command"`
 	Model                  string        `yaml:"model"`
+	ReasoningEffort        string        `yaml:"reasoning_effort"`
 	CWD                    string        `yaml:"cwd"`
 	Timeout                time.Duration `yaml:"timeout"`
 	DeliveryDir            string        `yaml:"delivery_dir"`

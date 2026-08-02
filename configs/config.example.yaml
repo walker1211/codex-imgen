@@ -21,6 +21,7 @@ backend:
   type: built_in_codex # 使用本机 Codex CLI 调用内置 $imagegen
   command: codex # Codex CLI 命令名或可执行文件路径
   model: "" # 为空时使用 Codex CLI 默认模型；需要固定模型时再填写
+  reasoning_effort: "" # 为空时继承 Codex CLI 配置；可按模型支持情况填写 medium、high、xhigh、max 等
   cwd: "" # Codex CLI 工作目录；为空时使用当前进程工作目录
   timeout: 300s # 单次 Codex/imagegen 调用超时时间
   delivery_dir: "" # 可选：生成后复制图片到该目录；OpenClaw/TG 可指向其允许发送的 workspace/media 目录
