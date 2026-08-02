@@ -157,7 +157,8 @@ Important config fields:
 - `storage.data_dir` and `storage.sqlite_path` control service data and SQLite paths.
 - `scheduler.global_max_concurrency` controls the serve-mode backend generation queue shared by async submit and WebSocket realtime; `scheduler.max_count_per_job` controls the per-job image count cap.
 - `backend.command` defaults to `codex` and must be a single executable that accepts `exec --json`.
-- `backend.model` is passed to Codex CLI when set; when empty, the actual model is whatever the backend executable uses by default.
+- `backend.model` selects the Codex agent that invokes `$imagegen`; it is passed with `--model` when set and otherwise inherits the backend default. Do not describe it as the image-generation model.
+- `backend.reasoning_effort` is passed per invocation as `--config model_reasoning_effort=...`; when empty, imgen inherits the Codex CLI configuration. Supported levels depend on `backend.model`, and the skill does not set this value.
 - `backend.cwd` is passed to Codex CLI as `--cd` when set.
 - `backend.delivery_dir` copies generated images to a caller-visible delivery directory before returning `images[].path`; OpenClaw Telegram can also set `IMGEN_DELIVERY_DIR` per process.
 - `backend.prompt.prefix` normally remains `$imagegen` and is prepended to the prompt text.
@@ -167,36 +168,20 @@ Important config fields:
 To confirm the current backend and model, inspect the local config from the discovered repo/config root:
 
 ```bash
-grep -nE '^[[:space:]]*(command|model|cwd|prefix):' configs/config.yaml
+grep -nE '^[[:space:]]*(command|model|reasoning_effort|cwd|prefix):' configs/config.yaml
 ```
 
-If `configs/config.yaml` is unavailable, do not invent a model. Say the model depends on the local `backend.model` setting or the default model of the configured Codex backend.
+If `configs/config.yaml` is unavailable, do not invent a model or effort level. Say they depend on the local backend settings and the configured Codex CLI defaults.
 
 ## OpenClaw calling contract
 
-OpenClaw should first resolve a config cwd using the discovery rules above. In a normal local checkout, `$HOME/Projects/codex-imgen` maps to the user's repo while avoiding a hardcoded username path. For normal image generation, default to the synchronous CLI route below; do not require `./imgen serve` unless the user needs service job management or realtime streaming. If the resolved root contains an `imgen` executable and `configs/config.yaml`, use this route:
+Resolve a config cwd with the discovery rules above. Normal image generation uses the synchronous CLI and does not require `imgen serve`:
 
 ```bash
 cd <repo-root> && IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen" ./imgen --json --count <N> --concurrency 1 "<single-image prompt>"
 ```
 
-Use repeated `--image <local-path>` flags before the prompt for image-to-image requests. Do not call OpenClaw's built-in `image_generate` tool. Do not fall back to direct `codex exec --json -- '$imagegen ...'`. Do not reuse old generated image paths unless the user explicitly asks for existing files.
-
-For Telegram delivery after synchronous CLI success, run imgen with `IMGEN_DELIVERY_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/workspace/imgen"`, then use direct channel delivery when OpenClaw's `message` tool is available: use `action="send"` to the current/original chat and attach each generated local file with the exact `path` or `filePath` returned by imgen. For PNG wallpapers or any image where original quality matters, include `forceDocument: true` or `asDocument: true` so Telegram sends the original file instead of a compressed photo preview. A concise user-facing caption/status message on delivered images is acceptable when useful, then reply only `NO_REPLY` so OpenClaw does not send duplicate text; OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` If the `message` tool is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for the completed image.
-
-For Telegram multi-image requests, prefer separate one-image commands when distinct themes are useful: run N independent `./imgen --json --count 1 --concurrency 1 "<single-image prompt>"` calls. When the execution tool supports background sessions, launch these independent commands concurrently, keep their session ids, poll all sessions, and send each successful `images[].path` with the `message` tool as soon as that session completes. Do not serialize independent theme generations unless the tool cannot run concurrent sessions. Do not wait for all requested images before sending earlier successes; later generation retries or timeouts must not block already completed images from being delivered.
-
-Do not rely on OpenClaw heartbeat or async command-completion delivery for synchronous CLI image results. If an exec/process call becomes a background session, poll it until completion and deliver each successful `images[].path` in the same user-visible flow before starting more generation.
-
-Then use one of these stable contracts.
-
-For CLI usage, OpenClaw should provide:
-
-- `cwd`: the discovered repo/config root.
-- `command`: `./imgen --json ...` when using a repository checkout, or an absolute `imgen` executable path only when paired with the discovered config cwd.
-- Prompt string describing one image or one candidate.
-- Optional local image paths via repeated `--image` flags.
-- Optional `count`, `concurrency`, and `json` output choice.
+If the execution tool supports a `cwd`, set it instead of using `cd`. Add repeated `--image <local-path>` flags before the prompt for image-to-image requests. References must be local files.
 
 Expected synchronous JSON result:
 
@@ -212,28 +197,21 @@ Expected synchronous JSON result:
 }
 ```
 
-Treat the call as successful only when `ok` is true and the expected completed images have non-empty `path` values. In text mode, treat non-empty path lines as the result.
+Treat the call as successful only when `ok` is true and every expected completed image has a non-empty, existing `path`. Per-image `status: "done"` is valid; do not require `completed`.
 
-If an execution tool cannot set `cwd`, use `cd <repo-root> && ./imgen ...` as the shell command.
+### Telegram delivery
 
-For service job usage, OpenClaw should use this only when it needs job management, polling, cancellation, or recovery:
+- Send each exact returned `path` or `filePath` to the current/original chat with OpenClaw's `message` tool.
+- Set `forceDocument: true` or `asDocument: true` for PNG wallpapers or other original-quality files.
+- After direct delivery, reply only `NO_REPLY`. If `message` is unavailable, return one `MEDIA:/absolute/path` line per image.
+- For distinct themes, run independent `--count 1 --concurrency 1` commands concurrently when supported, poll every background session, and deliver each successful path immediately. Do not make later retries block earlier results.
+- Keep delivery in the same user-visible flow; do not rely on heartbeat or async process-completion messages.
 
-1. Ensure `./imgen serve` is running locally from the discovered repo/config root.
-2. Submit with `./imgen submit --json` or the local API exposed by the service.
-3. Store the returned job id.
-4. Poll `./imgen get --json <job-id>` or subscribe to `/ws?job_id=<job-id>`.
-5. Read final image paths from `images[].path` after completion.
+Do not call `image_generate`, fall back to direct `codex exec`, or reuse old paths unless the user explicitly requested existing files.
 
-For realtime WebSocket usage, OpenClaw should use this only when it needs live streaming events:
+### Service and realtime routes
 
-1. Ensure `./imgen serve` is running locally from the discovered repo/config root.
-2. Connect to `/v1/realtime/generate/ws`.
-3. Send one `generate.start` frame with one or more items.
-4. Stream status from `session.started`, `item.started`, `image.completed`, `item.failed`, and terminal session events.
-5. Send each generated file path from `image.completed` as soon as it is available.
+- Use `submit --json` only for server-side job management, polling, cancellation, or recovery. It returns a job id; poll `get --json <job-id>` or `/ws?job_id=<job-id>` for final paths.
+- Use `/v1/realtime/generate/ws` only when `imgen serve` is running and live per-item events are required. Read paths from `image.completed`; realtime creates neither submit jobs nor store rows.
 
-Realtime WebSocket does not return a job id, does not use `get <job-id>`, and does not create submit job store rows.
-
-For Telegram delivery after synchronous CLI success, use the OpenClaw `message` tool when available: send the exact generated local file path with `path` or `filePath`, set `forceDocument: true` or `asDocument: true` for PNG wallpapers/original-quality delivery, use concise captions/status text when useful, then reply only `NO_REPLY`. OpenClaw Telegram direct chats should allow this silent reply instead of rewriting it into visible fallback text such as `No extra answer from me.` For multi-image requests with distinct themes, run the one-image `imgen` commands concurrently when possible and send each completed image as soon as its session returns `images[].path`. If direct message-tool delivery is unavailable, reply immediately with one `MEDIA:/absolute/path/to/image.png` line for each completed image.
-
-OpenClaw should not assume URL image input, public network binding, public filesystem scans, ccs Codex compatibility, direct native Codex CLI fallback, `imgen serve` for normal one-shot generation, async heartbeat delivery for final images, or access to secrets inside prompts.
+Do not assume public network binding, broad filesystem scans, ccs compatibility, secrets in prompts, or a known repository root.
